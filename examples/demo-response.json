@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "region_code": "99000000",
+  "region_code_system": "synthetic-only-v1",
+  "industry_code": "DEMO_COFFEE",
+  "source_kind": "synthetic",
+  "as_of": "2026-01-14",
+  "base_period": "2025Q4",
+  "model_version": "growth-synthetic-20261029T054010610720Z",
+  "growth": {
+    "status": "available",
+    "reason": null,
+    "estimated_yoy_growth": 0.11937597919384163,
+    "target_period": "2026Q1",
+    "comparison_period": "2025Q1",
+    "model_version": "growth-synthetic-20261029T054010610720Z",
+    "explanations": [
+      {
+        "method": "single_feature_reference_sensitivity",
+        "feature": "sales_yoy",
+        "observed_value": 0.12156184941078663,
+        "reference_value": 0.005153080490613138,
+        "delta_growth": 0.09745743808722945,
+        "direction": "positive"
+      },
+      {
+        "method": "single_feature_reference_sensitivity",
+        "feature": "resident_population",
+        "observed_value": 10834.0,
+        "reference_value": 19122.0,
+        "delta_growth": 0.012905514103879023,
+        "direction": "positive"
+      },
+      {
+        "method": "single_feature_reference_sensitivity",
+        "feature": "resident_per_store",
+        "observed_value": 637.2941176470588,
+        "reference_value": 643.4225,
+        "delta_growth": -0.00542145898732696,
+        "direction": "negative"
+      }
+    ]
+  },
+  "risk": {
+    "status": "available",
+    "score": 39.22,
+    "reason": null,
+    "policy_status": "draft",
+    "components": [
+      {
+        "name": "sales_decline",
+        "value": 0.12156184941078663,
+        "unit": "ratio",
+        "contribution_points": 0.0
+      },
+      {
+        "name": "closings_per_current_store",
+        "value": 0.11764705882352941,
+        "unit": "ratio",
+        "contribution_points": 39.2157
+      }
+    ]
+  },
+  "fit": {
+    "status": "available",
+    "score": 85.83,
+    "reason": null,
+    "policy_status": "draft",
+    "components": [
+      {
+        "name": "residents_per_store",
+        "value": 637.2941176470588,
+        "unit": "persons",
+        "contribution_points": 50.0
+      },
+      {
+        "name": "store_density",
+        "value": 14.166666666666668,
+        "unit": "stores_per_km2",
+        "contribution_points": 35.8333
+      }
+    ]
+  },
+  "policy_version": "draft-v0.1",
+  "warnings": [
+    "draft_scoring_policy",
+    "indices_are_not_probabilities",
+    "risk_closure_ratio_uses_current_stock_not_official_closure_rate",
+    "fit_is_population_and_competition_only_not_validated_business_suitability",
+    "합성 예시 데이터의 결과이며 실제 지역 진단이나 성능이 아닙니다.",
+    "single_feature_reference_sensitivity_is_not_shap_causal_or_additive"
+  ]
+}

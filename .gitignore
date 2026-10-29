@@ -1,0 +1,72 @@
+# Python environments and generated package metadata
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+/build/
+/dist/
+
+# Test, lint, type-checking, notebook, and coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.ipynb_checkpoints/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local configuration and credentials; keep the secret-free shared template
+.env
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
+
+# Raw/processed datasets, model artifacts, and experiment output
+/data/
+/artifacts/
+/reports/
+/models/
+/mlruns/
+/wandb/
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+*.pt
+*.pth
+*.h5
+*.hdf5
+*.parquet
+*.arrow
+*.feather
+
+# Local scratch files, logs, editor state, and OS metadata
+/tmp/
+/logs/
+*.log
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Deliberately tracked: requirements.lock, .env.example, source/tests/docs,
+# and the explicitly synthetic JSON examples in examples/.

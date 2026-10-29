@@ -1,0 +1,71 @@
+{
+  "inventory_status": "catalog_only",
+  "note": "Public catalog references, not proof of successful acquisition or consistent historical coverage. Verify current terms, definitions, observed periods, and release dates before training.",
+  "sources": [
+    {
+      "id": "seoul-sales-adstrd",
+      "name": "서울시 상권분석서비스 추정매출·행정동",
+      "url": "https://data.seoul.go.kr/dataList/OA-22175/S/1/datasetView.do",
+      "coverage": "Seoul administrative dong and source industry code",
+      "adapter": "import-seoul",
+      "acquisition": "official CSV download; optional official API requires separately configured credentials",
+      "must_verify": ["sales aggregation definition", "KRW unit", "source publication date", "2021-onward comparable history", "administrative code version"]
+    },
+    {
+      "id": "seoul-stores-adstrd",
+      "name": "서울시 상권분석서비스 점포·행정동",
+      "url": "https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do",
+      "coverage": "Seoul administrative dong and source industry code",
+      "adapter": "import-seoul",
+      "must_verify": ["total stores definition", "opening and closing definitions", "same quarter, region and industry as sales", "source publication date"]
+    },
+    {
+      "id": "national-stores",
+      "name": "소상공인시장진흥공단 상가·상권정보",
+      "url": "https://www.data.go.kr/data/15012005/openapi.do",
+      "coverage": "national store snapshots",
+      "adapter": "not_implemented",
+      "must_verify": ["API approval and quotas", "source code crosswalk", "historical snapshots", "identifier changes"]
+    },
+    {
+      "id": "resident-population",
+      "name": "행정안전부 주민등록 인구통계",
+      "url": "https://jumin.mois.go.kr/",
+      "coverage": "national resident population",
+      "adapter": "not_implemented",
+      "must_verify": ["administrative code and date", "observed month and publication date", "population is a stock, not a quarterly sum"]
+    },
+    {
+      "id": "sgis-statistics",
+      "name": "SGIS 통계 OpenAPI",
+      "url": "https://sgis.mods.go.kr/developer/html/openApi/api/intro.html",
+      "coverage": "national statistics; availability depends on dataset and year",
+      "adapter": "not_implemented",
+      "must_verify": ["credentials", "license", "reference year", "SGIS-to-H10 official crosswalk", "no boundary integration assumed"]
+    },
+    {
+      "id": "gyeonggi-card-sales",
+      "name": "경기도 시군구·요일 카드매출 집계",
+      "url": "https://data.gg.go.kr/portal/data/service/selectServicePage.do?infId=FXH15LRVMQ2VFI6HJF2X38245004&infSeq=1",
+      "coverage": "Gyeonggi, city/county/district aggregate",
+      "adapter": "not_implemented",
+      "must_verify": ["actual observed history", "download availability", "industry mapping", "card sales are not identical to Seoul estimated sales", "cannot duplicate district values into dong observations"]
+    },
+    {
+      "id": "busan-commercial-change",
+      "name": "부산광역시 상권 변화지표",
+      "url": "https://www.data.go.kr/data/15095252/openapi.do",
+      "coverage": "Busan commercial areas",
+      "adapter": "not_implemented",
+      "must_verify": ["historical periods", "commercial area boundaries", "indicator definition", "not a replacement for observed sales labels"]
+    },
+    {
+      "id": "gyeongnam-tourism-commercial",
+      "name": "경상남도 주요 관광상권 정보",
+      "url": "https://www.data.go.kr/data/15165270/fileData.do",
+      "coverage": "selected tourism commercial areas in Gyeongnam",
+      "adapter": "not_implemented",
+      "must_verify": ["covered tourist sites", "observed history", "geographic coding", "not representative of the whole province"]
+    }
+  ]
+}
