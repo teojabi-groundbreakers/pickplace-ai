@@ -2,7 +2,7 @@
 
 Spring Boot에서 호출하는 FastAPI 기반 내부 AI 서비스와 데이터 준비·학습 도구입니다.
 
-**현재 단계는 실데이터 모델 개발을 시작할 수 있는 로컬 기반 구현입니다.** 서울시 원본 CSV·API 키는 아직 제공되지 않았으며, 합성 자료의 학습·테스트 결과를 실제 상권 예측 성능으로 표시하지 않습니다. 기존 `pickplace-frontend`는 수정하지 않습니다.
+**현재 단계는 실데이터 모델 개발을 시작할 수 있는 로컬 기반 구현입니다.** 서울시 CSV는 로컬에 확보했으며, 과거 공개 시점과 자료 버전은 추가 확인이 필요합니다. 합성 자료의 학습·테스트 결과를 실제 상권 예측 성능으로 표시하지 않습니다.
 
 ## 포함한 기능
 
@@ -81,13 +81,13 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 ```bash
 pickplace-ai import-seoul \
-  --sales data/raw/seoul-sales.csv \
-  --stores data/raw/seoul-stores.csv \
+  --sales data/raw/seoul/sales/seoul-sales.csv \
+  --stores data/raw/seoul/stores/seoul-stores.csv \
   --available-at 2026-10-29 \
   --sales-basis as_published \
-  --output data/processed/seoul-snapshot.csv
+  --output data/processed/seoul/seoul-snapshot.csv
 
-pickplace-ai inspect --input data/processed/seoul-snapshot.csv
+pickplace-ai inspect --input data/processed/seoul/seoul-snapshot.csv
 ```
 
 위 날짜는 **명령 형식 예시**입니다. 확인한 실제 공개·사용 가능일로 바꾸세요. 오늘 내려받은 과거 파일 모두에 오늘 날짜를 넣었다면, 그 자료는 과거에 사용할 수 있었다는 증거가 아니므로 과거 예측 학습 표본이 만들어지지 않을 수 있습니다. 과거 공개 시점을 임의로 생성하지 않습니다.
@@ -96,7 +96,7 @@ pickplace-ai inspect --input data/processed/seoul-snapshot.csv
 
 ```bash
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 pickplace-ai train \
-  --input data/processed/seoul-history.csv --output artifacts/seoul-v1 --model hist
+  --input data/processed/seoul/seoul-history.csv --output artifacts/seoul-v1 --model hist
 ```
 
 LightGBM은 선택적입니다. 설치 후 `--model lightgbm`을 명시합니다. 환경에 따라 OpenMP 런타임이 필요하며 이번 기본 환경 검증과 구분합니다.

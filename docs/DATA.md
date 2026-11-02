@@ -1,16 +1,66 @@
 # 데이터 확보·입력 가이드
 
-현재 구현은 공식 파일을 **내려받은 뒤 공통 형식으로 변환하는 CSV 가져오기**와 공통 관측 스키마를 제공한다. 실제 전국 데이터 수집, 인증키 발급, 과거 공개일 복원 및 실제 데이터의 모델 성능 검증이 완료된 상태는 아니다. 출처 후보와 미확인 조건은 [데이터 목록](../config/data_sources.json)에 기록한다.
+현재 구현은 공식 파일을 **내려받은 뒤 공통 형식으로 변환하는 CSV 가져오기**와 공통 관측 스키마를 제공한다. 서울 매출·점포·상주인구·길단위인구·영역 CSV가 로컬에 확보되어 있다. 실제 전국 데이터 수집, 인증키 발급, 과거 공개일 복원 및 실제 데이터의 모델 성능 검증이 완료된 상태는 아니다. 출처 후보와 미확인 조건은 [데이터 목록](../config/data_sources.json)에 기록한다.
 
 ## 데이터 범위
 
 | 범위 | 기능 방향 | 현 상태 |
 |---|---|---|
 | 전국 공통 점포·인구 | 수요·경쟁 등 기본진단 | 공통 입력 스키마 준비. 전국 수집 어댑터는 후속 작업 |
-| 서울 행정동×업종×분기 | 추정매출 성장 예측 | 매출·점포 CSV 가져오기 구현. 실제 원본 확보 필요 |
+| 서울 행정동×업종×분기 | 추정매출 성장 예측 | 매출·점포 CSV 확보 및 가져오기 점검. 과거 공개일·버전 검증 필요 |
 | 다른 지역 매출·상권 지표 | 지역별 확장 | 공개목록 후보만 정리. 단위·기간·정의·지역별 오차 검증 필요 |
 
 상가정보의 최신 현황 한 번으로 성장 예측 라벨이나 과거 폐업률을 만들 수 있다고 가정하지 않는다. 과거 분기별 이력, 출처 변경 및 코드 변경을 확인한다. 유동인구를 주민등록 인구로 바꾸거나 없는 매출을 0으로 채우지 않는다.
+
+## 자료 보관 폴더
+
+지역과 데이터 기준별로 원본을 분리한다. 원본 ZIP은 해당 폴더에 그대로 보관하고, 압축을 푼 CSV도 같은 폴더에 둔다. 지역별 원본의 파일명과 수집 시점은 유지한다.
+
+```text
+data/
+├── raw/                         # 공식 원본 ZIP·CSV
+│   ├── seoul/                   # 서울 행정동 기준
+│   │   ├── sales/               # 추정매출
+│   │   ├── stores/              # 점포·개업·폐업
+│   │   ├── resident_population/ # 상주인구
+│   │   ├── working_population/  # 직장인구
+│   │   ├── floating_population/ # 길단위·생활인구
+│   │   └── boundaries/          # 행정동 경계·공간 정보
+│   ├── nationwide/              # 전국 공통 자료
+│   │   ├── stores/              # 소상공인 상가정보
+│   │   ├── resident_population/ # 주민등록 인구
+│   │   ├── restaurant_licenses/ # 일반음식점 인허가
+│   │   └── sgis/                # SGIS 공간통계
+│   ├── gyeonggi/card_sales/     # 경기도 카드매출
+│   ├── busan/commercial_change/ # 부산 상권변화지표
+│   └── gyeongnam/tourism/       # 경남 관광상권
+└── processed/                   # 원본에서 변환한 공통 형식
+    ├── seoul/
+    ├── nationwide/
+    ├── gyeonggi/
+    ├── busan/
+    └── gyeongnam/
+```
+
+`data/` 전체는 Git에서 제외하므로 복제 시 빈 폴더도 전달되지 않는다. 필요한 폴더는 새 환경에서 아래 명령으로 만들 수 있다.
+
+```bash
+mkdir -p data/raw/seoul/{sales,stores,resident_population,working_population,floating_population,boundaries} \
+  data/raw/nationwide/{stores,resident_population,restaurant_licenses,sgis} \
+  data/raw/gyeonggi/card_sales data/raw/busan/commercial_change data/raw/gyeongnam/tourism \
+  data/processed/{seoul,nationwide,gyeonggi,busan,gyeongnam}
+```
+
+이 구조는 전국 데이터 어댑터 구현을 의미하지 않으며, 기존 합성 예제 파일도 별도로 유지한다. 변환된 파일은 원본에 덮어쓰지 않는다.
+
+## 확보한 서울 CSV 점검 (2026-11-03)
+
+- 매출 5개 파일 343,167행과 점포 5개 파일 704,470행은 모두 CP949이며, 각각 2021Q1~2025Q4의 20개 분기가 있다. 원본 키(분기·행정동 코드·업종 코드) 중복은 없었다.
+- 매출 행 343,167건 모두 점포 키와 일치했다. 점포에만 있는 361,303개 키는 매출 기준 결합에서 제외된다. 매출은 매년 63개 업종, 점포는 100개 업종이며 범위 차이의 이유는 확인되지 않았다. 누락값을 0으로 가정하지 않는다.
+- 확보한 점포 CSV의 `유사_업종_점포_수`는 전 행에서 `점포_수 + 프랜차이즈_점포_수`와 일치했다. 현행 [공식 API 명세](https://data.seoul.go.kr/dataList/OA-22172/A/1/datasetView.do)는 `SIMILR_INDUTY_STOR_CO`를 `전체_점포_수`로 표기하고 일반·프랜차이즈를 합한 값이라고 설명한다. 다만 과거 명칭의 공식 매핑 이력은 미확인이다.
+- 상주인구와 길단위인구는 각각 2021Q1~2026Q2, 9,350행이며, 분기·행정동 키 중복은 없었다. 영역 파일은 425행, 좌표·면적만 제공하고 다각형 경계나 기준일 열은 없다. [공식 안내](https://data.seoul.go.kr/dataList/OA-22160/A/1/datasetView.do)의 좌표계는 EPSG:5181이며 면적 단위는 확인되지 않았다.
+- 현재 어댑터는 매출·점포만 읽는다. 인구·면적은 자동 결합되지 않으며, 공개 시점·코드·면적 단위 확인과 결합 구현이 필요하다.
+- 확보한 최신 CSV에 2026-11-03을 일괄 사용 가능일로 입력한 커피·음료 가져오기 점검은 8,396행을 반환했지만, 과거의 다음 분기는 이미 끝났으므로 학습 가능 표본은 0건이다. 이는 과거 공개일의 증거가 없을 때 정상적인 차단이다. 당시 공개 버전과 시점을 확보하기 전 과거 예측 검증으로 해석하지 않는다.
 
 ## 공통 관측 파일
 
@@ -50,11 +100,11 @@ CSV 한 행은 **동일한 코드 체계의 지역×업종×분기**다. 코드�
 4. 시트 미리보기는 일부 행만 보일 수 있으므로 전체 자료로 간주하지 않는다. 공식 안내는 Sheet의 1,000건 제한과 전체 CSV 이용을 구분한다.
 5. ZIP 내부 매출·점포 CSV의 실제 헤더·코드·금액 단위·분기를 확인하고 다음 가져오기 명령을 사용한다.
 
-이 준비 단계에서는 파일 다운로드 버튼의 실제 공개 URL과 원본 전송 성공을 확인하지 못했다. 자동 다운로드 URL을 임의로 만들거나 비공식 복제본을 공식 원본으로 등록하지 않는다. 포털이 지연되면 공식 상세 페이지에서 재시도한다. 파일 확보가 불가능한 경우 Open API 경로를 검토하되 공식 인증키 발급·접근 권한과 전체 건수·페이징 명세를 확인한 뒤 별도 수집기를 연결한다.
+사용자가 전달한 CSV를 로컬에 보관했다. 공식 다운로드 버튼의 전송 경로와 파일별 과거 공개 버전은 독립 검증하지 않았다. 자동 다운로드 URL을 임의로 만들거나 비공식 복제본을 공식 원본으로 등록하지 않는다. Open API 수집이 필요하면 공식 인증키 발급·접근 권한과 전체 건수·페이징 명세를 확인한 뒤 별도 수집기를 연결한다.
 
 서울시 공개 안내에는 2026년 7월 제공 기준 변경과 2021년 이후 자료 제공 내용이 있으므로 오래된 복제 파일과 현재 원본을 섞기 전에 산정·공간 기준의 일관성을 확인한다. 데이터 이용조건은 다운로드 시점의 원문을 보존한다.
 
-원본 CSV를 `data/raw/`에 보관한 뒤 공통 CSV로 변환한다. `data/`는 Git 제외 대상이다. 영문 OpenAPI 열 이름 또는 한글 다운로드 열 이름을 지원하고, UTF-8(BOM 포함)·CP949를 읽는다.
+서울 매출 CSV는 `data/raw/seoul/sales/`, 점포 CSV는 `data/raw/seoul/stores/`에 보관한 뒤 공통 CSV로 변환한다. 영문 OpenAPI 열 이름 또는 한글 다운로드 열 이름을 지원하고, UTF-8(BOM 포함)·CP949를 읽는다.
 
 | 의미 | 영문 열 | 한글 열 |
 |---|---|---|
@@ -62,7 +112,7 @@ CSV 한 행은 **동일한 코드 체계의 지역×업종×분기**다. 코드�
 | 지역 | `ADSTRD_CD` | `행정동_코드` |
 | 업종 | `SVC_INDUTY_CD` | `서비스_업종_코드` |
 | 추정매출 | `THSMON_SELNG_AMT` | `당월_매출_금액` |
-| 전체 점포 | `SIMILR_INDUTY_STOR_CO` | `전체_점포_수` |
+| 전체 점포 | `SIMILR_INDUTY_STOR_CO` | `전체_점포_수` 또는 확보한 CSV의 `유사_업종_점포_수` |
 | 개업 | `OPBIZ_STOR_CO` | `개업_점포_수` |
 | 폐업 | `CLSBIZ_STOR_CO` | `폐업_점포_수` |
 
@@ -80,24 +130,24 @@ from pickplace_ai.data import write_observations
 from pickplace_ai.ingest import import_seoul
 
 rows = import_seoul(
-    sales_paths=[Path("data/raw/seoul-sales.csv")],
-    stores_paths=[Path("data/raw/seoul-stores.csv")],
+    sales_paths=[Path("data/raw/seoul/sales/seoul-sales.csv")],
+    stores_paths=[Path("data/raw/seoul/stores/seoul-stores.csv")],
     available_at=date.fromisoformat("2026-10-29"),
     industry_code=None,
     sales_basis="as_published",
 )
-write_observations(rows, Path("data/processed/seoul.csv"))
+write_observations(rows, Path("data/processed/seoul/seoul.csv"))
 ```
 
 CLI 사용 예:
 
 ```bash
 pickplace-ai import-seoul \
-  --sales data/raw/seoul-sales.csv \
-  --stores data/raw/seoul-stores.csv \
+  --sales data/raw/seoul/sales/seoul-sales.csv \
+  --stores data/raw/seoul/stores/seoul-stores.csv \
   --available-at 2026-10-29 \
   --sales-basis as_published \
-  --output data/processed/seoul.csv
+  --output data/processed/seoul/seoul.csv
 ```
 
 여러 연도 파일은 `--sales`·`--stores` 뒤에 경로를 나열한다. 특정 업종으로 제한하려면 CLI의 업종 필터 옵션에 실제 원본 업종 코드를 전달한다. `coffee` 같은 서비스용 별칭으로 원본 코드를 추정하지 않는다. 이미 존재하는 출력 파일은 덮어쓰지 않으므로 새 버전 파일명을 사용한다.

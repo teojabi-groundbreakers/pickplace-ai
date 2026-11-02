@@ -5,9 +5,11 @@ historical release dates, convert administrative codes, or reinterpret a field
 named ``당월_매출_금액`` as a monthly total.
 """
 
+import codecs
 import csv
-import io
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -23,7 +25,9 @@ ALIASES = {
     "region_code": ("ADSTRD_CD", "행정동_코드"),
     "industry_code": ("SVC_INDUTY_CD", "서비스_업종_코드"),
     "sales_amount": ("THSMON_SELNG_AMT", "당월_매출_금액"),
-    "store_count": ("SIMILR_INDUTY_STOR_CO", "전체_점포_수"),
+    # Older downloadable CSVs call the total "유사_업종_점포_수". Seoul's
+    # current API calls SIMILR_INDUTY_STOR_CO "전체_점포_수".
+    "store_count": ("SIMILR_INDUTY_STOR_CO", "전체_점포_수", "유사_업종_점포_수"),
     "opening_count": ("OPBIZ_STOR_CO", "개업_점포_수"),
     "closing_count": ("CLSBIZ_STOR_CO", "폐업_점포_수"),
 }
@@ -36,32 +40,49 @@ class ImportDataError(ValueError):
     """Source shape or data does not meet the explicit import contract."""
 
 
-def _read_csv(path: Path) -> tuple[list[str], list[tuple[int, dict[str, str]]]]:
-    content = path.read_bytes()
-    decoded = None
+def _encoding(path: Path) -> str:
+    """Choose the first encoding that decodes the *entire* file."""
     for encoding in ("utf-8-sig", "cp949"):
+        decoder = codecs.getincrementaldecoder(encoding)(errors="strict")
         try:
-            decoded = content.decode(encoding)
-            break
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    decoder.decode(chunk)
+                decoder.decode(b"", final=True)
+            return encoding
         except UnicodeDecodeError:
             continue
-    if decoded is None:
-        raise ImportDataError(f"{path}: expected UTF-8 or CP949 encoded CSV")
-    reader = csv.DictReader(io.StringIO(decoded))
-    if reader.fieldnames is None:
-        raise ImportDataError(f"{path}: missing CSV header")
-    headers = [name.strip() for name in reader.fieldnames]
-    if len(set(headers)) != len(headers):
-        raise ImportDataError(f"{path}: duplicate CSV header")
-    rows = []
-    for line_number, raw in enumerate(reader, start=2):
-        if None in raw or any(value is None for value in raw.values()):
-            raise ImportDataError(f"{path}:{line_number}: inconsistent number of CSV fields")
-        row = {name.strip(): value.strip() for name, value in raw.items()}
-        if not any(row.values()):
-            continue
-        rows.append((line_number, row))
-    return headers, rows
+    raise ImportDataError(f"{path}: expected UTF-8 or CP949 encoded CSV")
+
+
+@contextmanager
+def _read_csv(path: Path) -> Iterator[tuple[list[str], Iterator[tuple[int, dict[str, str]]]]]:
+    # Validate the entire byte stream before selecting a fallback; a valid UTF-8
+    # header alone cannot tell us whether later rows are encoded in CP949.
+    encoding = _encoding(path)
+    try:
+        with path.open(encoding=encoding, newline="") as stream:
+            reader = csv.DictReader(stream)
+            if reader.fieldnames is None:
+                raise ImportDataError(f"{path}: missing CSV header")
+            headers = [name.strip() for name in reader.fieldnames]
+            if len(set(headers)) != len(headers):
+                raise ImportDataError(f"{path}: duplicate CSV header")
+
+            def rows() -> Iterator[tuple[int, dict[str, str]]]:
+                for line_number, raw in enumerate(reader, start=2):
+                    if None in raw or any(value is None for value in raw.values()):
+                        raise ImportDataError(
+                            f"{path}:{line_number}: inconsistent number of CSV fields"
+                        )
+                    row = {name.strip(): value.strip() for name, value in raw.items()}
+                    if any(row.values()):
+                        yield line_number, row
+
+            yield headers, rows()
+    except UnicodeDecodeError as exc:
+        # Covers a file changed between the encoding scan and parsing.
+        raise ImportDataError(f"{path}: expected UTF-8 or CP949 encoded CSV") from exc
 
 
 def _columns(headers: list[str], required: tuple[str, ...], path: Path) -> dict[str, str]:
@@ -115,34 +136,36 @@ def _source_rows(
         ("sales_amount",) if kind == "sales" else ("store_count", "opening_count", "closing_count")
     )
     for path in paths:
-        headers, rows = _read_csv(Path(path))
-        columns = _columns(headers, required, Path(path))
-        for line_number, row in rows:
-            location = f"{path}:{line_number}"
-            try:
-                source_industry = row[columns["industry_code"]]
-                if industry_code is not None and source_industry != industry_code:
-                    continue
-                period = _period(row[columns["period"]])
-                region = row[columns["region_code"]]
-                if not re.fullmatch(r"\d{6,12}", region):
-                    raise ImportDataError(f"Expected an unmodified string region code: {region!r}")
-                if not source_industry:
-                    raise ImportDataError("Missing industry code")
-                key = (period, region, source_industry)
-                if key in result:
-                    raise ImportDataError(
-                        f"Duplicate {kind} key {key}; first seen at {provenance[key]}"
-                    )
-                result[key] = {
-                    name: _number(row[columns[name]], integer=kind == "stores")
-                    if name in columns
-                    else None
-                    for name in fields
-                }
-                provenance[key] = location
-            except ValueError as exc:
-                raise ImportDataError(f"{location}: {exc}") from exc
+        with _read_csv(Path(path)) as (headers, rows):
+            columns = _columns(headers, required, Path(path))
+            for line_number, row in rows:
+                location = f"{path}:{line_number}"
+                try:
+                    source_industry = row[columns["industry_code"]]
+                    if industry_code is not None and source_industry != industry_code:
+                        continue
+                    period = _period(row[columns["period"]])
+                    region = row[columns["region_code"]]
+                    if not re.fullmatch(r"\d{6,12}", region):
+                        raise ImportDataError(
+                            f"Expected an unmodified string region code: {region!r}"
+                        )
+                    if not source_industry:
+                        raise ImportDataError("Missing industry code")
+                    key = (period, region, source_industry)
+                    if key in result:
+                        raise ImportDataError(
+                            f"Duplicate {kind} key {key}; first seen at {provenance[key]}"
+                        )
+                    result[key] = {
+                        name: _number(row[columns[name]], integer=kind == "stores")
+                        if name in columns
+                        else None
+                        for name in fields
+                    }
+                    provenance[key] = location
+                except ValueError as exc:
+                    raise ImportDataError(f"{location}: {exc}") from exc
     return result
 
 

@@ -64,6 +64,45 @@ def test_exact_join_uses_total_stores_not_sum(tmp_path):
     assert rows[1].store_count is None
 
 
+def test_import_korean_download_store_header_in_cp949(tmp_path):
+    sales = write_csv(
+        tmp_path / "sales.csv",
+        KOREAN,
+        [["20231", "11110515", "CS100001", "1000"]],
+        encoding="cp949",
+    )
+    stores = write_csv(
+        tmp_path / "stores.csv",
+        [
+            "기준_년분기_코드",
+            "행정동_코드",
+            "서비스_업종_코드",
+            "점포_수",
+            "유사_업종_점포_수",
+            "개업_점포_수",
+            "폐업_점포_수",
+            "프랜차이즈_점포_수",
+        ],
+        [["20231", "11110515", "CS100001", "74", "75", "3", "3", "1"]],
+        encoding="cp949",
+    )
+    row = import_seoul([sales], [stores], date(2023, 6, 1))[0]
+    assert row.store_count == 75
+    assert row.opening_count == 3
+    assert row.closing_count == 3
+
+
+def test_store_aliases_cannot_appear_together(tmp_path):
+    sales = write_csv(tmp_path / "sales.csv", ENGLISH, [["20231", "11110515", "CS100001", "1000"]])
+    stores = write_csv(
+        tmp_path / "stores.csv",
+        [*KOREAN[:3], "전체_점포_수", "유사_업종_점포_수"],
+        [["20231", "11110515", "CS100001", "75", "74"]],
+    )
+    with pytest.raises(ImportDataError, match="ambiguous aliases for store_count"):
+        import_seoul([sales], [stores], date(2023, 6, 1))
+
+
 def test_duplicate_quarter_scope_across_files_rejected(tmp_path):
     sales = write_csv(tmp_path / "sales.csv", ENGLISH, [["20251", "11200670", "CS100010", "1000"]])
     with pytest.raises(ImportDataError, match="Duplicate sales key"):
@@ -153,3 +192,31 @@ def test_fractional_store_count_rejected(tmp_path):
     )
     with pytest.raises(ImportDataError, match="integer count"):
         import_seoul([sales], [stores], date(2025, 5, 1))
+
+
+def test_cp949_fallback_checks_beyond_ascii_prefix(tmp_path):
+    source = tmp_path / "late-cp949.csv"
+    with source.open("w", encoding="cp949", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow([*ENGLISH, "note"])
+        writer.writerow(["20251", "11200670", "CS100010", "1000", "ok"])
+        for _ in range(10000):
+            writer.writerow(["20251", "11200670", "OTHER", "0", "a" * 100])
+        writer.writerow(["20251", "11200670", "OTHER", "0", "한글"])
+    rows = import_seoul([source], [], date(2025, 5, 1), industry_code="CS100010")
+    assert len(rows) == 1
+    assert rows[0].sales_amount == 1000
+
+
+def test_invalid_late_bytes_rejected_even_in_filtered_rows(tmp_path):
+    source = tmp_path / "damaged.csv"
+    with source.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow([*ENGLISH, "note"])
+        writer.writerow(["20251", "11200670", "CS100010", "1000", "ok"])
+        for _ in range(10000):
+            writer.writerow(["20251", "11200670", "OTHER", "0", "a" * 100])
+    with source.open("ab") as file:
+        file.write(b"20251,11200670,OTHER,0,\xff\n")
+    with pytest.raises(ImportDataError, match="expected UTF-8 or CP949"):
+        import_seoul([source], [], date(2025, 5, 1), industry_code="CS100010")
