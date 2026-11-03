@@ -64,6 +64,10 @@ mkdir -p data/raw/seoul/{sales,stores,resident_population,working_population,flo
 
 ## 공통 관측 파일
 
+서울 카페·음료 실험에 사용한 `data/processed/seoul/seoul-coffee-snapshot-20261103.csv`는 2026-11-03에 확보한 단일 스냅샷이다. 행의 `available_at`은 취득 시점을 표시하며 과거 최초 공개일이 아니다. 원본 10개 CSV의 경로·해시·출처는 로컬 연구용 모델 폴더의 `source-manifest.json`에 보관한다. 모델과 원본·가공 데이터는 Git에 포함하지 않는다.
+
+같은 원본에서 매출이 있는 63개 업종을 추출한 전체 공통 스냅샷은 `data/processed/seoul/seoul-all-snapshot-20261103.csv`에 둔다. 점포 자료에만 등장하는 37개 업종의 매출은 0이 아니라 **미확보**다. 업종명·원본의 해시와 제외 업종 목록은 전체 업종 실험 산출물에 별도 기록한다.
+
 CSV 한 행은 **동일한 코드 체계의 지역×업종×분기**다. 코드는 문자열로 보존한다.
 
 | 필드 | 필수 | 의미 |
