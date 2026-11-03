@@ -71,6 +71,8 @@ python -m pip check
 
 ## Git 추적 범위
 
+서울 63개 업종 연구용 모델의 별도 테스트 API는 [후향 테스트 API](RESEARCH_API.md)를 참고한다. `compose.research.yaml`은 운영 Compose와 독립적인 내부 네트워크를 쓰고, 선택적 로컬 오버레이만 루프백 포트를 연다. 실제 Lightsail 배포를 의미하지 않는다.
+
 - 소스, 테스트, 문서, Docker 설정, pyproject.toml, requirements.lock과 비밀값 없는 .env.example을 추적한다.
 - examples/의 JSON은 출처가 synthetic으로 표시된 참고 자료이므로 추적한다. 새로 생성하는 실행 요청·응답은 reports/ 등 제외 경로에 보관한다.
 - .venv/·Python 캐시·패키지 메타데이터·개발 도구 캐시를 제외한다.

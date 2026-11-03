@@ -56,3 +56,7 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 `/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다.
 
 외부 SGIS 경계 조회, 프론트엔드 직접 연결 및 전국 데이터 수집 API는 이 서비스의 초기 구현 범위에 포함하지 않는다.
+
+## 후향 실험 모델 연동 테스트
+
+63개 업종 연구 모델은 별도의 `pickplace_ai.research_api` 서비스로만 시험한다. `GET /research/industries`, `POST /research/predict`에 연구용 `X-API-Key`가 필요하다. 호출자는 공통 관측 이력과 실제 확보 기준일, 모델 종류(`selected` 또는 `learned`)를 전달한다. 완료된 업종별 시험 분기만 재현하며, 응답은 `retrospective_research_only`와 검증되지 않은 지역·입력 범위를 표시한다. 운영 `/predict`, 실시간 미래 예측 또는 성공 확률로 취급하지 않는다. Docker·요청 생성·BE 네트워크는 [후향 테스트 API](RESEARCH_API.md)를 참고한다.
