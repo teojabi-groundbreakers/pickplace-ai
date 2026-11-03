@@ -5,6 +5,7 @@
 | [MODEL_DESIGN.md](MODEL_DESIGN.md) | 예측 목표, 특징값, 분할·평가, 진단지수·설명 한계 |
 | [DATA.md](DATA.md) | 공식 CSV 준비, 코드·공개 시점·집계 기준, 정규화 |
 | [BACKEND_CONTRACT.md](BACKEND_CONTRACT.md) | Spring Boot 내부 API, 부분 결과, FE 계약 차이 |
+| [RESEARCH_API.md](RESEARCH_API.md) | 업종별 후향 실험 모델의 Docker 테스트 API와 요청 생성 |
 | [OPERATIONS.md](OPERATIONS.md) | 환경변수, 모델 산출물, Docker·네트워크·검증 |
 | [WORKLOG.md](WORKLOG.md) | 구현·검증·미완료 기록과 다음 작업 |
 

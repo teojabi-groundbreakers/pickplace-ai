@@ -1,0 +1,44 @@
+# Test-only service; no host port is published. Spring Boot must explicitly
+# join the external Docker network `pickplace-ai-research-internal` and call
+# http://research-api:8000. This network is intentionally separate from the
+# production network. Add compose.research.local.yaml for loopback-only tests.
+name: pickplace-ai-research
+
+services:
+  research-api:
+    image: pickplace-ai-research:local
+    build:
+      context: .
+      dockerfile: Dockerfile.research
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      PICKPLACE_RESEARCH_MODEL_ROOT: /app/research-models
+      PICKPLACE_RESEARCH_API_KEY: ${PICKPLACE_RESEARCH_API_KEY:?Set a research-only API key}
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - type: bind
+        # Override on a shared host when trusted model files live elsewhere.
+        source: ${PICKPLACE_RESEARCH_MODEL_SOURCE:-./artifacts/seoul-all-industries-retrospective-20261103}
+        target: /app/research-models
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1
+    networks:
+      - ai-research
+
+networks:
+  ai-research:
+    name: pickplace-ai-research-internal
+    internal: true

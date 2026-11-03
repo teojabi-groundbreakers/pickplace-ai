@@ -1,0 +1,15 @@
+# Optional local debugging override. The extra bridge allows a published port
+# to reach the container while the published host address remains loopback.
+# The default research deployment stays on the internal-only network.
+services:
+  research-api:
+    ports:
+      - "127.0.0.1:18000:8000"
+    networks:
+      - ai-research
+      - research-local
+
+networks:
+  research-local:
+    name: pickplace-ai-research-local
+    internal: false

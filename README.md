@@ -136,5 +136,6 @@ API는 FE의 `/analyses` 응답을 직접 대신하지 않습니다. Spring Boot
 - [모델 및 진단지표 설계](docs/MODEL_DESIGN.md)
 - [실제 데이터 확보·반입](docs/DATA.md)
 - [Spring Boot 연동 계약](docs/BACKEND_CONTRACT.md)
+- [후향 실험 모델 테스트 API](docs/RESEARCH_API.md)
 - [실행·배포·운영](docs/OPERATIONS.md)
 - [작업 이력과 남은 일](docs/WORKLOG.md)
