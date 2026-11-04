@@ -1,0 +1,39 @@
+name: pickplace-ai-near-term
+
+services:
+  near-term-api:
+    image: pickplace-ai-near-term:local
+    build:
+      context: .
+      dockerfile: Dockerfile.near-term
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      PICKPLACE_NEAR_TERM_MODEL_ROOT: /app/near-term-model
+      PICKPLACE_NEAR_TERM_API_KEY: ${PICKPLACE_NEAR_TERM_API_KEY:?Set a research-only API key}
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - type: bind
+        source: ${PICKPLACE_NEAR_TERM_MODEL_SOURCE:-./artifacts/seoul-near-term-2026q2-20261104}
+        target: /app/near-term-model
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1
+    networks:
+      - near-term-internal
+
+networks:
+  near-term-internal:
+    name: pickplace-ai-near-term-internal
+    internal: true

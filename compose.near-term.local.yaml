@@ -1,0 +1,13 @@
+# Optional loopback-only access for a BE process running on the same host.
+services:
+  near-term-api:
+    ports:
+      - "127.0.0.1:18001:8000"
+    networks:
+      - near-term-internal
+      - near-term-local
+
+networks:
+  near-term-local:
+    name: pickplace-ai-near-term-local
+    internal: false
