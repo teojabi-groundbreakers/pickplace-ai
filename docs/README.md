@@ -2,6 +2,8 @@
 
 | 문서 | 내용 |
 |---|---|
+| [AI_MENTORING_QUESTIONS.md](AI_MENTORING_QUESTIONS.md) | 전문가 멘토링 핵심 질문·의견 메모 |
+| [AI_MENTORING_QUESTIONS.pptx](AI_MENTORING_QUESTIONS.pptx) | 전문가 멘토링 질문 요약 발표자료 |
 | [MODEL_DESIGN.md](MODEL_DESIGN.md) | 예측 목표, 특징값, 분할·평가, 진단지수·설명 한계 |
 | [FORECAST_2026.md](FORECAST_2026.md) | 2025년까지의 자료를 이용한 2026년 분기별 연구용 추정 |
 | [NEAR_TERM_FORECAST.md](NEAR_TERM_FORECAST.md) | 2026년 2분기까지 반영한 단기 추정 및 기존 결과 비교 |
