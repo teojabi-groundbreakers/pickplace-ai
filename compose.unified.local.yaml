@@ -1,0 +1,12 @@
+# Optional loopback-only access for a backend running on the host.
+services:
+  unified-api:
+    ports:
+      - "127.0.0.1:18003:8000"
+    networks:
+      - unified-internal
+      - unified-local
+networks:
+  unified-local:
+    name: pickplace-ai-unified-local
+    internal: false
