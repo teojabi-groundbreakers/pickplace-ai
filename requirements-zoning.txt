@@ -1,0 +1,4 @@
+# Optional dependencies for scripts/prepare_seoul_zoning_research.py only.
+shapely==2.2.0
+pyproj==3.8.0
+pyshp==3.1.8
