@@ -10,7 +10,7 @@ import argparse
 import json
 from pathlib import Path
 
-from pickplace_ai.seoul_zoning_research import prepare_version
+from pickplace_ai.seoul_zoning_research import CLASSIFICATION_SCENARIOS, prepare_version
 
 REPO = Path(__file__).resolve().parents[1]
 ZONING_ROOT = REPO / "data/raw/seoul/zoning/urban_area/source_versions"
@@ -28,20 +28,30 @@ def main() -> None:
         help="Official source ZIP version to prepare; default: all six",
     )
     parser.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
+    parser.add_argument("--zoning-root", type=Path, default=ZONING_ROOT)
+    parser.add_argument("--boundary-archive", type=Path, default=BOUNDARY_ARCHIVE)
+    parser.add_argument(
+        "--classification-scenario",
+        choices=CLASSIFICATION_SCENARIOS,
+        default="strict",
+        help="Strict output or unapproved repeated-code diagnostic scenario",
+    )
     args = parser.parse_args()
     versions = VERSIONS if args.version == "all" else (args.version,)
     for version in versions:
         output, manifest = prepare_version(
             version,
-            ZONING_ROOT,
-            BOUNDARY_ARCHIVE,
+            args.zoning_root,
+            args.boundary_archive,
             args.output_root,
+            classification_scenario=args.classification_scenario,
         )
         print(
             json.dumps(
                 {
                     "csv": str(output),
                     "version_id": version,
+                    "classification_scenario": args.classification_scenario,
                     "row_count": manifest["row_count"],
                     "training_eligible": manifest["training_eligible"],
                     "max_unknown_share": manifest["max_unknown_share"],

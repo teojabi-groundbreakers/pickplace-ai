@@ -37,6 +37,15 @@ UNKNOWN_CLASS = "unknown"
 AREA_CRS = "EPSG:6933"
 OVERLAY_GRID_METRES = 0.01
 CODE_SYSTEM = "seoul-adstrd-8"
+CLASSIFICATION_SCENARIOS = ("strict", "repeated_midcode_alias")
+REPEATED_MIDCODE_SCENARIO_ARCHIVES = {
+    "20231024": "13bfc542f5a1109f3833e77a35979c3dfed5e6d513efb36c3f9a051e20c8d314",
+    "20241107": "8065f1f804f12ee83bd9ea8c31655fc00fb4913507501a750f01a62719e9a21e",
+    "20250320": "4f182d44e4d4efa3579c23d3c8bfa8f272ec08325207c836c5cc5c370955d19e",
+    "20250805": "b26a4c201c348071a00d5f06a152fffd3912cb45fd6ecbe750167aa5be97674d",
+    "20260304": "cc7054dbb3c396526660e37233da57d898f5538f7203bc2dec935abb42208bf7",
+    "20260911": "e92cc4e8e3c154a57cdeb580c38bb103aee0f33961cd6e77a2a029fc02724cd3",
+}
 _XLSX_NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 
@@ -174,6 +183,25 @@ def classify_record(record: dict, codebook: Codebook) -> tuple[str, str | None]:
     return category, None
 
 
+def repeated_midcode_review_candidate(record: dict, codebook: Codebook) -> str | None:
+    """Suggest a class for manual review; never change the strict classification.
+
+    Some source rows repeat the middle classification code in the small-code
+    field where the supplied codebook has an empty value. A suggestion requires
+    the rest of the hierarchy and the name to pass the normal strict checks.
+    """
+    if classify_record(record, codebook)[1] != "code_hierarchy_mismatch":
+        return None
+    middle = str(record.get("MLSFC_CL") or "").strip()
+    small = str(record.get("SCLAS_CL") or "").strip()
+    attribute = str(record.get("ATRB_SE") or "").strip()
+    if not middle or small != middle or attribute != middle:
+        return None
+    candidate = {**record, "SCLAS_CL": ""}
+    category, reason = classify_record(candidate, codebook)
+    return category if reason is None else None
+
+
 def _read_shapefile(archive_path: Path, expected_epsg: int, encoding: str):
     try:
         import shapefile
@@ -305,12 +333,17 @@ def load_admin_geometries(
 
 
 def load_zone_geometries(
-    archive_path: Path, codebook: Codebook
+    archive_path: Path,
+    codebook: Codebook,
+    *,
+    classification_scenario: str = "strict",
 ) -> tuple[list[SpatialFeature], Counter]:
     import shapefile
     from pyproj import Transformer
 
     transformer = Transformer.from_crs("EPSG:5174", AREA_CRS, always_xy=True)
+    if classification_scenario not in CLASSIFICATION_SCENARIOS:
+        raise ZoningPreparationError("Unknown zoning classification scenario")
     zones = []
     quality = Counter()
     with _read_shapefile(archive_path, 5174, "cp949") as reader:
@@ -323,6 +356,11 @@ def load_zone_geometries(
             quality["source_zone_rows"] += 1
             record = reader.record(row_index).as_dict()
             category, reason = classify_record(record, codebook)
+            review_candidate = repeated_midcode_review_candidate(record, codebook)
+            if review_candidate is not None:
+                quality["reviewable_repeated_midcode_rows"] += 1
+                if classification_scenario == "repeated_midcode_alias":
+                    category, reason = review_candidate, None
             try:
                 source_shape = reader.shape(row_index)
             except shapefile.ShapefileException as exc:
@@ -346,6 +384,9 @@ def load_zone_geometries(
                     quality["repaired_area_preserved_zone_rows"] += 1
                 else:
                     category, reason = UNKNOWN_CLASS, "unsafe_geometry_repair"
+            if review_candidate is not None and reason is None:
+                if classification_scenario == "repeated_midcode_alias":
+                    quality["simulated_repeated_midcode_alias_rows"] += 1
             if reason:
                 quality[f"excluded_{reason}"] += 1
             else:
@@ -398,6 +439,12 @@ def area_shares(
         ambiguity = _polygon_or_empty(
             shapely.union_all(pair_overlaps, grid_size=OVERLAY_GRID_METRES)
         )
+        unknown_involved_overlap = _polygon_or_empty(
+            shapely.intersection(ambiguity, unions[UNKNOWN_CLASS], grid_size=OVERLAY_GRID_METRES)
+        )
+        known_only_overlap = _polygon_or_empty(
+            shapely.difference(ambiguity, unknown_involved_overlap, grid_size=OVERLAY_GRID_METRES)
+        )
         unknown = _polygon_or_empty(
             shapely.union_all([unions[UNKNOWN_CLASS], ambiguity], grid_size=OVERLAY_GRID_METRES)
         )
@@ -424,6 +471,21 @@ def area_shares(
         }
         shares["unknown_share"] = max(0.0, unknown.area / denominator)
         shares["overlap_ambiguity_share"] = max(0.0, ambiguity.area / denominator)
+        shares["overlap_unknown_involved_share"] = max(
+            0.0, unknown_involved_overlap.area / denominator
+        )
+        shares["overlap_known_only_share"] = max(0.0, known_only_overlap.area / denominator)
+        if (
+            abs(
+                shares["overlap_ambiguity_share"]
+                - shares["overlap_unknown_involved_share"]
+                - shares["overlap_known_only_share"]
+            )
+            > 0.0001
+        ):
+            raise ZoningPreparationError(
+                f"Overlap partition exceeds numerical tolerance for {region_code}"
+            )
         assigned_keys = [*(f"{category}_share" for category in CLASSES), "unknown_share"]
         assigned_total = sum(shares[key] for key in assigned_keys)
         measured_uncovered = max(0.0, uncovered.area / denominator)
@@ -443,6 +505,10 @@ def area_shares(
             quality_reasons.append("unknown_area_over_5pct")
         if shares["overlap_ambiguity_share"] > 0.05:
             quality_reasons.append("overlap_ambiguity_over_5pct")
+        if shares["overlap_unknown_involved_share"] > 0.05:
+            quality_reasons.append("overlap_unknown_involved_over_5pct")
+        if shares["overlap_known_only_share"] > 0.05:
+            quality_reasons.append("overlap_known_only_over_5pct")
         if shares["uncovered_share"] > 0.01:
             quality_reasons.append("uncovered_area_over_1pct")
         rows.append(
@@ -481,11 +547,18 @@ def prepare_version(
     output_root: Path,
     *,
     codebook_reference_version: str = "20241107",
+    classification_scenario: str = "strict",
 ) -> tuple[Path, dict]:
     if not re.fullmatch(r"20\d{6}", version_id):
         raise ZoningPreparationError("Version ID must be YYYYMMDD from the source listing")
+    if classification_scenario not in CLASSIFICATION_SCENARIOS:
+        raise ZoningPreparationError("Unknown zoning classification scenario")
     zoning_archive = zoning_root / version_id / "source.zip"
     zoning_meta = _read_source_metadata(zoning_archive)
+    if classification_scenario == "repeated_midcode_alias" and (
+        REPEATED_MIDCODE_SCENARIO_ARCHIVES.get(version_id) != zoning_meta["archive_sha256"]
+    ):
+        raise ZoningPreparationError("Code alias scenario source archive is not reviewed")
     boundary_meta = _read_source_metadata(boundary_archive)
     reference_archive = zoning_root / codebook_reference_version / "source.zip"
     reference_meta = _read_source_metadata(reference_archive)
@@ -501,12 +574,20 @@ def prepare_version(
         ):
             raise ZoningPreparationError("Version codebook differs from the reviewed reference")
         codebook_borrowed = False
-    destination = output_root / f"zoning_shares_{version_id}.csv"
+    scenario_suffix = "" if classification_scenario == "strict" else f"_{classification_scenario}"
+    destination = output_root / f"zoning_shares_{version_id}{scenario_suffix}.csv"
     metadata_path = destination.with_suffix(destination.suffix + ".metadata.json")
     if destination.exists() or metadata_path.exists():
         raise FileExistsError("Refusing to overwrite an existing zoning research output")
     admins, admin_names, admin_quality = load_admin_geometries(boundary_archive)
-    zones, zone_quality = load_zone_geometries(zoning_archive, codebook)
+    zones, zone_quality = load_zone_geometries(
+        zoning_archive, codebook, classification_scenario=classification_scenario
+    )
+    if classification_scenario == "repeated_midcode_alias" and (
+        zone_quality["reviewable_repeated_midcode_rows"] != 3
+        or zone_quality["simulated_repeated_midcode_alias_rows"] != 3
+    ):
+        raise ZoningPreparationError("Code alias scenario pattern count changed")
     rows = area_shares(admins, zones, admin_names)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temp_csv = temp_meta = None
@@ -522,7 +603,13 @@ def prepare_version(
             stream.flush()
             os.fsync(stream.fileno())
         report = {
-            "artifact_kind": "seoul_zoning_area_shares_research_v1",
+            "artifact_kind": (
+                "seoul_zoning_area_shares_research_v1"
+                if classification_scenario == "strict"
+                else "seoul_zoning_area_shares_counterfactual_v1"
+            ),
+            "classification_scenario": classification_scenario,
+            "scenario_approved_for_training": False,
             "version_id": version_id,
             "source_listing_modified_date": zoning_meta.get("source_listing_modified_date"),
             "region_code_system": CODE_SYSTEM,
@@ -542,6 +629,10 @@ def prepare_version(
             "max_unknown_share": max(row["unknown_share"] for row in rows),
             "max_uncovered_share": max(row["uncovered_share"] for row in rows),
             "max_overlap_ambiguity_share": max(row["overlap_ambiguity_share"] for row in rows),
+            "max_overlap_unknown_involved_share": max(
+                row["overlap_unknown_involved_share"] for row in rows
+            ),
+            "max_overlap_known_only_share": max(row["overlap_known_only_share"] for row in rows),
             "max_abs_numerical_partition_residual_share": max(
                 abs(row["numerical_partition_residual_share"]) for row in rows
             ),
@@ -551,6 +642,14 @@ def prepare_version(
             / sum(row["admin_area_m2"] for row in rows),
             "area_weighted_overlap_ambiguity_share": sum(
                 row["overlap_ambiguity_share"] * row["admin_area_m2"] for row in rows
+            )
+            / sum(row["admin_area_m2"] for row in rows),
+            "area_weighted_overlap_unknown_involved_share": sum(
+                row["overlap_unknown_involved_share"] * row["admin_area_m2"] for row in rows
+            )
+            / sum(row["admin_area_m2"] for row in rows),
+            "area_weighted_overlap_known_only_share": sum(
+                row["overlap_known_only_share"] * row["admin_area_m2"] for row in rows
             )
             / sum(row["admin_area_m2"] for row in rows),
             "unknown_above_5pct_count": sum(row["unknown_share"] > 0.05 for row in rows),
@@ -585,6 +684,11 @@ def prepare_version(
                 "Zoning geometry and boundary validity dates are unverified.",
                 "Ambiguous, unsafe-repair, and unmapped areas are assigned to unknown.",
                 "Area shares are research candidates, not sales-model features.",
+                *(
+                    ["Unapproved code alias; do not use for training."]
+                    if classification_scenario != "strict"
+                    else []
+                ),
             ],
             "csv_sha256": sha256(temp_csv),
         }
