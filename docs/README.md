@@ -2,6 +2,11 @@
 
 | 문서 | 내용 |
 |---|---|
+| [SEOUL_ZONING_SOURCE_REVIEW_2026-11-12.md](SEOUL_ZONING_SOURCE_REVIEW_2026-11-12.md) | VWorld 표본과 서울 용도지역 과거 자료 확인 |
+| [SEOUL_ZONING_ARCHIVE_AUDIT_2026-11-12.md](SEOUL_ZONING_ARCHIVE_AUDIT_2026-11-12.md) | 서울 용도지역 ZIP 6종의 원본 구조·코드 감사 |
+| [SEOUL_ADMIN_BOUNDARY_AUDIT_2026-11-12.md](SEOUL_ADMIN_BOUNDARY_AUDIT_2026-11-12.md) | 서울 행정동 경계와 매출 코드 대조 |
+| [SEOUL_ZONING_TRAINING_PREPARATION_2026-11-12.md](SEOUL_ZONING_TRAINING_PREPARATION_2026-11-12.md) | 용도지역 면적 비율 전처리·시점 검증·학습 연결 조건 |
+| [SEOUL_ZONING_CONFLICT_DIAGNOSIS_2026-11-13.md](SEOUL_ZONING_CONFLICT_DIAGNOSIS_2026-11-13.md) | 용도지역 중첩의 원본 도형별 진단과 처리 기준 |
 | [MODEL_DESIGN.md](MODEL_DESIGN.md) | 예측 목표, 특징값, 분할·평가, 진단지수·설명 한계 |
 | [FORECAST_2026.md](FORECAST_2026.md) | 2025년까지의 자료를 이용한 2026년 분기별 연구용 추정 |
 | [NEAR_TERM_FORECAST.md](NEAR_TERM_FORECAST.md) | 2026년 2분기까지 반영한 단기 추정 및 기존 결과 비교 |
