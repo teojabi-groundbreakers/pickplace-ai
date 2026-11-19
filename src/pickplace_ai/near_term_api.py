@@ -27,9 +27,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
-from pickplace_ai import data, features, forecast_2026, ingest, periods, training
+from pickplace_ai import data, features, features_seoul_v1, forecast_2026, ingest, periods, training
 from pickplace_ai.artifacts import file_sha256, package_versions
-from pickplace_ai.features import FeatureUnavailable, feature_record
 from pickplace_ai.schemas import PredictionRequest
 from scripts import near_term_forecast, retrospective_all_industries
 
@@ -119,7 +118,19 @@ class NearTermRegistry:
             raise NearTermModelError("Missing dependency hashes")
         if summary.get("runner_sha256") != file_sha256(Path(near_term_forecast.__file__)):
             raise NearTermModelError("Prediction code does not match model")
-        if summary.get("feature_code_sha256") != file_sha256(Path(features.__file__)):
+        # Use the exact feature implementation recorded in the trusted model.
+        # The legacy file retains its original bytes; the live feature module may
+        # evolve independently without weakening the artifact integrity check.
+        expected_features = summary.get("feature_code_sha256")
+        self.feature_module = next(
+            (
+                module
+                for module in (features, features_seoul_v1)
+                if expected_features == file_sha256(Path(module.__file__))
+            ),
+            None,
+        )
+        if self.feature_module is None:
             raise NearTermModelError("Feature code does not match model")
         for name, code_path in code_paths.items():
             if dependencies.get(name) != file_sha256(Path(code_path)):
@@ -290,8 +301,10 @@ class NearTermRegistry:
         if comparison.sales_amount < 1_000_000:
             result["warnings"].append("comparison_sales_below_1m_krw")
         try:
-            values = feature_record(payload.history, payload.base_period, payload.as_of)
-        except FeatureUnavailable as exc:
+            values = self.feature_module.feature_record(
+                payload.history, payload.base_period, payload.as_of
+            )
+        except self.feature_module.FeatureUnavailable as exc:
             return unavailable(exc.reason)
         horizon = "1" if payload.target_period == "2026Q3" else "2"
         frame = pd.DataFrame(

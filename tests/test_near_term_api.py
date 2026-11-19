@@ -239,3 +239,35 @@ def test_loaded_pickle_bytes_are_the_verified_bytes(artifacts, monkeypatch):
     monkeypatch.setattr(api.joblib, "load", swap_after_verification)
     registry = NearTermRegistry(artifacts)
     assert registry.models["1"]["model_name"] == "dummy"
+
+
+def test_legacy_feature_artifact_uses_exact_hashed_implementation(artifacts, payload):
+    from pickplace_ai import features_seoul_v1
+
+    summary_path = artifacts / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["feature_code_sha256"] = file_sha256(Path(features_seoul_v1.__file__))
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    registry = NearTermRegistry(artifacts)
+    assert registry.feature_module is features_seoul_v1
+    with TestClient(create_app(NearTermSettings(artifacts, "test-secret"))) as client:
+        result = client.post(
+            "/research/near-term/predict", json=payload, headers={"X-API-Key": "test-secret"}
+        )
+        assert result.status_code == 200
+        assert result.json()["estimated_yoy_growth"] == pytest.approx(0.2)
+        payload["history"] = [r for r in payload["history"] if r["period"] != "2025Q2"]
+        result = client.post(
+            "/research/near-term/predict", json=payload, headers={"X-API-Key": "test-secret"}
+        )
+        assert result.json()["reason"] == "insufficient_history"
+        assert result.json()["estimated_yoy_growth"] is None
+
+
+def test_unrecognized_feature_hash_is_rejected(artifacts):
+    summary_path = artifacts / "summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["feature_code_sha256"] = "0" * 64
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    with TestClient(create_app(NearTermSettings(artifacts, "test-secret"))) as client:
+        assert client.get("/health").json()["model_ready"] is False

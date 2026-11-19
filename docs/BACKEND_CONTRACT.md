@@ -60,3 +60,18 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 ## 후향 실험 모델 연동 테스트
 
 63개 업종 연구 모델은 별도의 `pickplace_ai.research_api` 서비스로만 시험한다. `GET /research/industries`, `POST /research/predict`에 연구용 `X-API-Key`가 필요하다. 호출자는 공통 관측 이력과 실제 확보 기준일, 모델 종류(`selected` 또는 `learned`)를 전달한다. 완료된 업종별 시험 분기만 재현하며, 응답은 `retrospective_research_only`와 검증되지 않은 지역·입력 범위를 표시한다. 운영 `/predict`, 실시간 미래 예측 또는 성공 확률로 취급하지 않는다. Docker·요청 생성·BE 네트워크는 [후향 테스트 API](RESEARCH_API.md)를 참고한다.
+
+
+## 서울·경기 통합 연구 API (2026-11-09)
+
+`POST /research/unified/predict`는 서울과 경기를 함께 학습한 별도 후향 연구 모델을 호출한다. 지역별 원천과 코드 체계를 명시하고 최근 4개 완전 분기의 이력을 BE가 전달한다. FE 분석 전체 응답이 아닌 내부 DTO다. 성장률만 연구용으로 반환하며 점수·요인·지도 등 제공 불가 항목은 null과 사유로 표시한다. 지원 범위 밖, 이력 누락, Q4 등 미지원 기간도 null과 사유다. [통합 API 문서](UNIFIED_API.md)에 요청·인증·실행 방법을 기록한다.
+
+공동 모델의 검증 오차는 서울 70.28%p, 경기 38.83%p이며 재사용된 과거 시험과 재학습 이후 최종 모델의 성능은 독립 검증이 아니다. 기존 FE의 연구 예측 문구는 서울로 고정돼 경기 출처를 표시하도록 FE·BE 계약을 조정하기 전 그 화면에 직접 연결하지 않는다. API의 원본 코드와 FE H10·업종 간 자동 대응이나 실제 FE/BE 통합은 구현하지 않았다.
+
+
+### 서울 연구용 매출 이력 보류
+
+통합 API의 서울 요청이 전년·최근 분기 저매출이나 급증·급감 기준에 걸리면 `status=unavailable`, `estimated_yoy_growth=null`, `reason=seoul_sales_history_unstable`, `reason_message`와 `risk_signals`/`risk_signal_messages`를 반환한다. BE는 코드를 보존하고 한국어 메시지를 FE에 전달해야 하며 이를 0이나 점수로 변환하지 않는다. 경기 요청은 `risk_policy_status=not_applicable`과 미검증 이유를 반환한다. 해당 기준은 탐색적이며 실제 FE/BE 연결은 아직 검증하지 않았다. [통합 API 문서](UNIFIED_API.md) 참고.
+
+
+보류 응답의 `risk_details`는 사유별 관측 분기·값·기준값·단위를 전달한다. `ratio=1.0`은 100% 변화이며 KRW는 호출자의 단위 선언이다. 이는 원인 확정이나 입력 검증이 아니다. BE가 사유 문구와 함께 전달할 수 있지만 실제 FE/BE 통합은 아직 수행하지 않았다. [통합 API 설명](UNIFIED_API.md) 참고.
