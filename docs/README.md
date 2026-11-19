@@ -2,6 +2,7 @@
 
 | 문서 | 내용 |
 |---|---|
+| [AI_EXPERT_CONSULTATION_2026-11-09.md](AI_EXPERT_CONSULTATION_2026-11-09.md) | 전문가 자문 기록과 후속 검토 항목 |
 | [VWORLD_ZONING_PREPARATION.md](VWORLD_ZONING_PREPARATION.md) | VWorld 공간자료 원본 확인 준비 |
 | [REGION_PROFILE_FE_BE_HANDOFF.md](REGION_PROFILE_FE_BE_HANDOFF.md) | 작성일 기준 지역 특성·상권 진단 FE·BE 후속 설계 |
 | [SEOUL_ACTIVITY_MODEL_RESEARCH.md](SEOUL_ACTIVITY_MODEL_RESEARCH.md) | 인구·활동 특징의 매출 예측 비교 연구 |
