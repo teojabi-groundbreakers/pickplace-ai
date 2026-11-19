@@ -1,0 +1,37 @@
+name: pickplace-ai-unified
+services:
+  unified-api:
+    image: pickplace-ai-unified:local
+    build:
+      context: .
+      dockerfile: Dockerfile.unified
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      PICKPLACE_UNIFIED_MODEL_ROOT: /app/unified-model
+      PICKPLACE_UNIFIED_API_KEY: ${PICKPLACE_UNIFIED_API_KEY:?Set a research-only API key}
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - type: bind
+        source: ${PICKPLACE_UNIFIED_MODEL_SOURCE:-./artifacts/unified-growth-research-20261109}
+        target: /app/unified-model
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1
+    networks:
+      - unified-internal
+networks:
+  unified-internal:
+    name: pickplace-ai-unified-internal
+    internal: true
