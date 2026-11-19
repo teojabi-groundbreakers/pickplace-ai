@@ -123,6 +123,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings if settings is not None else Settings.from_env()
     if config.require_api_key and not config.api_key:
         raise ValueError("PICKPLACE_API_KEY is required when PICKPLACE_REQUIRE_API_KEY=true")
+    if config.api_key and not config.api_key.isascii():
+        raise ValueError("PICKPLACE_API_KEY must be ASCII")
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -166,7 +168,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
     ) -> None:
         if config.api_key and (
-            api_key is None or not secrets.compare_digest(api_key, config.api_key)
+            api_key is None
+            or not api_key.isascii()
+            or not secrets.compare_digest(api_key, config.api_key)
         ):
             raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
 

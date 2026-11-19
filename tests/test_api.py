@@ -121,6 +121,26 @@ def test_authentication_is_enforced_when_configured(tmp_path):
         )
 
 
+@pytest.mark.parametrize("method,path", [("GET", "/model-info"), ("POST", "/predict")])
+@pytest.mark.parametrize("api_key", [b"wrong-test-key", b"\xe9"])
+def test_invalid_api_key_returns_unauthorized(tmp_path, method, path, api_key):
+    config = api.Settings(model_dir=tmp_path / "absent", api_key="test-only-secret")
+    with TestClient(api.create_app(config), raise_server_exceptions=False) as client:
+        response = client.request(
+            method,
+            path,
+            headers=[(b"x-api-key", api_key)],
+            json=request_payload() if method == "POST" else None,
+        )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing X-API-Key"
+
+
+def test_configured_api_key_must_be_ascii():
+    with pytest.raises(ValueError, match="PICKPLACE_API_KEY must be ASCII"):
+        api.create_app(api.Settings(api_key="테스트-키"))
+
+
 def test_production_requires_a_key():
     with pytest.raises(ValueError, match="PICKPLACE_API_KEY"):
         api.create_app(api.Settings(require_api_key=True))
