@@ -19,6 +19,7 @@
 | [NATIONWIDE.md](NATIONWIDE.md) | 전국 상가·인구 스냅샷 집계 및 연구용 조회 API |
 | [SEOUL_API.md](SEOUL_API.md) | 서울 열린데이터광장 API 분기별 수집과 CSV 저장 |
 | [BACKEND_CONTRACT.md](BACKEND_CONTRACT.md) | Spring Boot 내부 API, 부분 결과, FE 계약 차이 |
+| [PER_INDICATOR_PERIOD_HANDOFF.md](PER_INDICATOR_PERIOD_HANDOFF.md) | 지표별 최신 분기 정책과 FE·AI 구현·검증 방향 |
 | [RESEARCH_API.md](RESEARCH_API.md) | 업종별 후향 실험 모델의 Docker 테스트 API와 요청 생성 |
 | [OPERATIONS.md](OPERATIONS.md) | 환경변수, 모델 산출물, Docker·네트워크·검증 |
 | [WORKLOG.md](WORKLOG.md) | 구현·검증·미완료 기록과 다음 작업 |
