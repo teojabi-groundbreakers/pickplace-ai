@@ -2,6 +2,8 @@
 
 | 문서 | 내용 |
 |---|---|
+| [POPULATION_POLICY_DATA.md](POPULATION_POLICY_DATA.md) | 추가 인구·정책 자료 현황과 공식 제공처 |
+| [POPULATION_POLICY_API.md](POPULATION_POLICY_API.md) | 인구·정책 API 수집과 CSV 저장 방법 |
 | [AI_MENTORING_QUESTIONS.md](AI_MENTORING_QUESTIONS.md) | 전문가 멘토링 핵심 질문·의견 메모 |
 | [AI_MENTORING_QUESTIONS.pptx](AI_MENTORING_QUESTIONS.pptx) | 전문가 멘토링 질문 요약 발표자료 |
 | [MODEL_DESIGN.md](MODEL_DESIGN.md) | 예측 목표, 특징값, 분할·평가, 진단지수·설명 한계 |
