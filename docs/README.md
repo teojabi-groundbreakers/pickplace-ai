@@ -2,6 +2,7 @@
 
 | 문서 | 내용 |
 |---|---|
+| [SEOUL_ACTIVITY_MODEL_RESEARCH.md](SEOUL_ACTIVITY_MODEL_RESEARCH.md) | 인구·활동 특징의 매출 예측 비교 연구 |
 | [SEOUL_INDICATORS_API.md](SEOUL_INDICATORS_API.md) | 서울 분기별 원본 현황 연구 API |
 | [FE_DIAGNOSIS_DATA_AUDIT.md](FE_DIAGNOSIS_DATA_AUDIT.md) | 작성일 기준 FE 진단 항목과 자료 확보 상태 점검 |
 | [POPULATION_POLICY_DATA.md](POPULATION_POLICY_DATA.md) | 추가 인구·정책 자료 현황과 공식 제공처 |
