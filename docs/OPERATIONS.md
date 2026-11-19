@@ -5,13 +5,15 @@
 | 이름 | 기본값 | 용도 |
 |---|---|---|
 | `PICKPLACE_MODEL_DIR` | `artifacts/current` | 운영자가 지정한 로컬 모델 디렉터리 |
-| `PICKPLACE_API_KEY` | 미설정 | 설정 시 predict/model-info에 X-API-Key 요구 |
+| `PICKPLACE_API_KEY` | 미설정 | ASCII 키만 허용. 설정 시 predict/model-info에 X-API-Key 요구 |
 | `PICKPLACE_REQUIRE_API_KEY` | `false` | true인데 키가 없으면 시작 실패 |
 | `PICKPLACE_ALLOW_SYNTHETIC` | `false` | 합성 요청·합성 모델 명시적 허용 |
 | `PICKPLACE_ALLOW_EXPERIMENTAL` | `false` | 검증 전 모델 명시적 허용 |
 | `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` | `.env.example`에서 1 권장 | 다른 서버·DB와의 CPU 경쟁 제한 |
 
 `.env.example`은 예시다. 일반 uvicorn 실행은 `.env`를 자동 로딩하지 않으므로 환경변수를 직접 전달하거나 별도 안전한 설정 방식을 사용한다. 실제 키를 Git·로그·문서에 넣지 않는다.
+
+인증을 사용하면 누락되거나 잘못된 `X-API-Key`는 HTTP 401을 반환한다. 비ASCII 요청 키도 401로 거부한다. 서버에 설정한 `PICKPLACE_API_KEY`가 비ASCII이면 시작 시 `ValueError`로 설정 오류를 알린다. 키를 설정하지 않은 로컬 선택 인증 모드는 유지한다.
 
 ## 상태와 실패 처리
 
@@ -28,7 +30,9 @@
 Dockerfile과 compose.yaml은 AI 서비스만 정의한다. 실제 Docker 빌드·컨테이너 실행 여부는 WORKLOG.md에 기록한다. 학습은 이미지 시작 과정에서 수행하지 않는다.
 
 ```bash
-export PICKPLACE_API_KEY='운영 환경에서 별도로 설정한 값'
+# 별도로 발급한 ASCII 키를 입력한다. 입력값은 화면에 표시되지 않는다.
+read -rs PICKPLACE_API_KEY
+export PICKPLACE_API_KEY
 docker compose build
 docker compose up -d
 docker compose logs ai-api
