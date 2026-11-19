@@ -1,10 +1,12 @@
 # 2026년 단기 추정 연구용 FastAPI
 
-2026Q2까지의 서울 행정동·업종 이력을 이용해 2026Q3 또는 2026Q4 전년 동기 대비 추정매출 성장률을 계산하는 내부 테스트 API다. 모델은 수정 스냅샷으로 학습했고 후향 비교만 수행했다. 운영 또는 창업 판단에 승인된 모델이 아니다. 2026Q3은 2026-11-04 기준 이미 끝난 분기의 사후 추정이다.
+[사용자 요청부터 FastAPI 응답까지의 순서도](../.archify/sequence-fastapi-user-request-20261113-081000/fastapi-user-request.html)에서 서버 시작 시 모델 검증, 내부 요청, 추론과 결과 반환을 볼 수 있다. FE·Spring Boot 연결은 현재 설계 계약으로 표시했다.
+
+2026Q2까지의 서울 행정동·업종 이력을 이용해 2026Q3 또는 2026Q4 전년 동기 대비 추정매출 성장률을 계산하는 내부 테스트 API다. 모델은 수정 스냅샷으로 학습했고 후향 비교만 수행했다. 운영 또는 창업 판단에 승인된 모델이 아니다. 2026Q3은 2026-11-13 기준 이미 끝난 분기의 사후 추정이다.
 
 ## 준비 및 실행
 
-Git에 포함되지 않는 신뢰된 `artifacts/seoul-near-term-2026q2-20261104/`의 `model.joblib`, `summary.json`, `forecast-2026-q3-q4.csv`가 필요하다. 모델의 지문은 파일 무결성만 확인하며 신뢰할 수 없는 joblib을 안전하게 만들지 못한다. 제공된 범위 파일은 학습 범위 기록 확인용이며, 입력의 원본 진위나 공식 코드 매핑을 검증하지 않는다.
+기본 Compose는 Git에 포함되지 않는 신뢰된 최신 산출물 `artifacts/seoul-near-term-2026q2-20261113/`의 `model.joblib`, `summary.json`, `forecast-2026-q3-q4.csv`를 마운트한다. 모델의 지문은 파일 무결성만 확인하며 신뢰할 수 없는 joblib을 안전하게 만들지 못한다. 제공된 범위 파일은 학습 범위 기록 확인용이며, 입력의 원본 진위나 공식 코드 매핑을 검증하지 않는다. 이 모델의 파일 지문과 예측값은 2026-11-04 산출물과 동일하므로 정확도 개선을 뜻하지 않는다.
 
 프로젝트 루트에서 Docker Desktop을 켜고 로컬 테스트용 키를 별도로 생성한다.
 
@@ -24,19 +26,19 @@ curl -H "X-API-Key: $PICKPLACE_NEAR_TERM_API_KEY" \
 
 결합 공통 CSV를 가진 로컬 환경에서 예시 요청 파일을 만든다. 실제 데이터는 Git에 넣지 않고 기존 파일을 덮어쓰지 않는다.
 
-현재 개발 기기에는 검증용 `reports/near-term-example-2026Q3.json`과 `reports/near-term-example-2026Q4.json`도 있다. 두 파일은 집계된 실제 데이터를 포함하고 Git에는 올라가지 않는다.
+현재 개발 기기에는 검증용 `reports/near-term-example-2026Q3.json`과 `reports/near-term-example-2026Q4.json`도 있다. 두 파일은 집계된 실제 데이터를 포함하고 Git에는 올라가지 않는다. 기존 예시 요청의 `as_of=2026-11-04`는 최신 산출물의 기준일 2026-11-13보다 이르므로 그대로 사용하면 `as_of_before_model_snapshot` 사유로 보류된다. 아래처럼 최신 분석일로 새 요청을 만든다.
 
 ```bash
 PYTHONPATH=src:. .venv/bin/python -m scripts.make_near_term_request \
   --input data/processed/seoul/seoul-2021-2026q2-20261104.csv \
   --region-code 11110515 --industry-code CS100010 \
-  --target-period 2026Q3 --as-of 2026-11-04 \
-  --output reports/near-term-request.json
+  --target-period 2026Q3 --as-of 2026-11-13 \
+  --output reports/near-term-request-20261113.json
 
 curl -X POST http://127.0.0.1:18001/research/near-term/predict \
   -H "X-API-Key: $PICKPLACE_NEAR_TERM_API_KEY" \
   -H 'Content-Type: application/json' \
-  --data-binary @reports/near-term-request.json
+  --data-binary @reports/near-term-request-20261113.json
 ```
 
 `as_of`는 데이터 취득일 이후이면서 한국 현재 날짜 이하여야 한다. 실제 사용 시 현재 분석일을 지정한다. BE가 `2025Q2~2026Q2` 연속 5분기의 동일 행정동·업종 이력을 제공한다. 서울 `seoul-adstrd` 8자리 코드와 원본 `CS...` 업종 코드만 지원한다. 카카오 H10을 자르거나 이름으로 추정하지 않고, 공식 대응 관계가 확인된 경우에만 BE가 변환한다.
@@ -49,4 +51,4 @@ curl -X POST http://127.0.0.1:18001/research/near-term/predict \
 docker compose -f compose.near-term.yaml -f compose.near-term.local.yaml down
 ```
 
-실제 Spring Boot와 FE의 통합은 아직 수행하지 않았다. 현재 API의 대상 기준은 2026Q2, 예측 분기는 2026Q3/Q4로 고정돼 있으며, 새 분기 자료를 쓰려면 별도 학습·검증·버전 갱신이 필요하다.
+Spring Boot의 별도 연구용 호출기에서 이 FastAPI로 실제 HTTP 요청을 보내는 계약 테스트는 통과했다. 공개 `POST /api/ai/analyses`와 FE 분석 화면에는 연결되지 않았다. 승인된 H10·업종 코드 대응과 매출 이력이 마련되기 전까지 연구용 응답을 사용자 결과로 제공하지 않는다. 현재 API의 대상 기준은 2026Q2, 예측 분기는 2026Q3/Q4로 고정돼 있으며, 새 분기 자료를 쓰려면 별도 학습·검증·버전 갱신이 필요하다.
