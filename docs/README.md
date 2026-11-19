@@ -2,6 +2,7 @@
 
 | 문서 | 내용 |
 |---|---|
+| [SEOUL_ROLLING_EVALUATION.md](SEOUL_ROLLING_EVALUATION.md) | 서울 서비스 업종의 여러 과거 분기 평가·후보 비교·실행 결과 |
 | [SEOUL_NEAR_TERM_RETRAIN_2026-11-13.md](SEOUL_NEAR_TERM_RETRAIN_2026-11-13.md) | 서울 단기 모델 재학습 기록과 학습·FastAPI 흐름 시각자료 |
 | [AI_EXPERT_CONSULTATION_2026-11-09.md](AI_EXPERT_CONSULTATION_2026-11-09.md) | 전문가 자문 기록과 후속 검토 항목 |
 | [VWORLD_ZONING_PREPARATION.md](VWORLD_ZONING_PREPARATION.md) | VWorld 공간자료 원본 확인 준비 |
