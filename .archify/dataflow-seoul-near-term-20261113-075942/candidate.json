@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "서울 단기 매출 예측 AI의 학습·응답 흐름",
+    "locale": "ko",
+    "output": ".archify/dataflow-seoul-near-term-20261113-075942/seoul-near-term-ai-flow.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/teojabi-groundbreakers/pickplace-ai.git",
+      "provider": "github",
+      "revision": "f35ca702131ca1242ff6f9ed8c785a66de484fee"
+    },
+    "views": [
+      {
+        "id": "training",
+        "label": "학습·평가",
+        "focus": ["historical", "api_source", "source_gate", "history_features", "train_horizons", "artifact"],
+        "note": "2024년 검증으로 후보를 고르고 2025년 후향 시험 뒤 두 분기 모델을 재학습"
+      },
+      {
+        "id": "serving",
+        "label": "요청·응답",
+        "focus": ["backend_request", "api_gate", "live_features", "model_check", "inference", "response"],
+        "note": "연구용 FastAPI가 입력과 모델을 확인해 성장률 또는 null과 사유를 반환"
+      }
+    ]
+  },
+  "stages": [
+    { "label": "원본·요청" },
+    { "label": "검증" },
+    { "label": "특징·평가" },
+    { "label": "모델" },
+    { "label": "결과" }
+  ],
+  "nodes": [
+    {
+      "id": "historical",
+      "type": "database",
+      "label": "2021–25 매출·점포",
+      "sublabel": "수정 스냅샷",
+      "stage": 0,
+      "row": 0,
+      "sources": [{ "path": "scripts/near_term_forecast.py", "line": 206, "end_line": 228 }]
+    },
+    {
+      "id": "api_source",
+      "type": "database",
+      "label": "2026 Q1·Q2 원본",
+      "sublabel": "서울 API 매출·점포",
+      "stage": 0,
+      "row": 1,
+      "sources": [{ "path": "scripts/near_term_forecast.py", "line": 229, "end_line": 266 }]
+    },
+    {
+      "id": "source_gate",
+      "type": "security",
+      "label": "출처·시점 검사",
+      "sublabel": "SHA · 취득일 · 분기",
+      "stage": 1,
+      "row": 0,
+      "sources": [{ "path": "scripts/near_term_forecast.py", "line": 206, "end_line": 269 }]
+    },
+    {
+      "id": "history_features",
+      "type": "backend",
+      "label": "5분기 특징 생성",
+      "sublabel": "행정동 × CS 업종",
+      "stage": 2,
+      "row": 0,
+      "sources": [
+        { "path": "scripts/near_term_forecast.py", "line": 47, "end_line": 106 },
+        { "path": "src/pickplace_ai/features.py", "line": 47, "end_line": 101 }
+      ]
+    },
+    {
+      "id": "train_horizons",
+      "type": "backend",
+      "label": "Q3·Q4 모델 학습",
+      "sublabel": "2024 선택 · 2025 시험",
+      "stage": 2,
+      "row": 1,
+      "sources": [
+        { "path": "scripts/near_term_forecast.py", "line": 122, "end_line": 157 },
+        { "path": "scripts/near_term_forecast.py", "line": 176, "end_line": 193 },
+        { "path": "scripts/near_term_forecast.py", "line": 279, "end_line": 348 }
+      ]
+    },
+    {
+      "id": "artifact",
+      "type": "database",
+      "label": "연구용 산출물",
+      "sublabel": "모델 2개 · CSV · SHA",
+      "stage": 3,
+      "row": 1,
+      "sources": [{ "path": "scripts/near_term_forecast.py", "line": 389, "end_line": 416 }]
+    },
+    {
+      "id": "backend_request",
+      "type": "external",
+      "label": "BE 내부 요청",
+      "sublabel": "Spring Boot · 미연동",
+      "stage": 0,
+      "row": 4,
+      "sources": [
+        { "path": "docs/NEAR_TERM_API.md", "line": 19, "end_line": 21 },
+        { "path": "docs/NEAR_TERM_API.md", "line": 42, "end_line": 52 }
+      ]
+    },
+    {
+      "id": "api_gate",
+      "type": "security",
+      "label": "FastAPI 요청 검사",
+      "sublabel": "키 · 코드 · 기간 · 범위",
+      "stage": 1,
+      "row": 4,
+      "sources": [
+        { "path": "src/pickplace_ai/near_term_api.py", "line": 279, "end_line": 308 },
+        { "path": "src/pickplace_ai/near_term_api.py", "line": 365, "end_line": 410 }
+      ]
+    },
+    {
+      "id": "live_features",
+      "type": "backend",
+      "label": "요청 이력 특징",
+      "sublabel": "연속 5분기 확인",
+      "stage": 2,
+      "row": 4,
+      "sources": [
+        { "path": "src/pickplace_ai/near_term_api.py", "line": 298, "end_line": 319 },
+        { "path": "src/pickplace_ai/features.py", "line": 47, "end_line": 101 }
+      ]
+    },
+    {
+      "id": "model_check",
+      "type": "security",
+      "label": "모델 무결성 검사",
+      "sublabel": "해시 · 코드 · 버전",
+      "stage": 3,
+      "row": 2,
+      "sources": [{ "path": "src/pickplace_ai/near_term_api.py", "line": 77, "end_line": 150 }]
+    },
+    {
+      "id": "inference",
+      "type": "backend",
+      "label": "Q3 또는 Q4 추정",
+      "sublabel": "거리별 모델 선택",
+      "stage": 3,
+      "row": 4,
+      "sources": [{ "path": "src/pickplace_ai/near_term_api.py", "line": 309, "end_line": 333 }]
+    },
+    {
+      "id": "response",
+      "type": "external",
+      "label": "성장률 또는 null",
+      "sublabel": "경고·사유 포함",
+      "stage": 4,
+      "row": 4,
+      "sources": [
+        { "path": "src/pickplace_ai/near_term_api.py", "line": 244, "end_line": 277 },
+        { "path": "src/pickplace_ai/near_term_api.py", "line": 320, "end_line": 333 }
+      ]
+    }
+  ],
+  "flows": [
+    { "id": "past-source", "from": "historical", "to": "source_gate", "label": "과거 매출·점포" },
+    { "id": "new-source", "from": "api_source", "to": "source_gate", "label": "Q1·Q2 원본" },
+    { "id": "checked-observations", "from": "source_gate", "to": "history_features", "label": "검증된 관측", "variant": "emphasis" },
+    { "id": "train-matrix", "from": "history_features", "to": "train_horizons", "label": "시계열 특징", "variant": "emphasis" },
+    { "id": "fit-artifact", "from": "train_horizons", "to": "artifact", "label": "최종 재학습", "variant": "emphasis" },
+    { "id": "load-files", "from": "artifact", "to": "model_check", "label": "모델·CSV·요약" },
+    { "id": "verified-model", "from": "model_check", "to": "inference", "label": "검증된 모델", "variant": "emphasis" },
+    { "id": "be-request", "from": "backend_request", "to": "api_gate", "label": "내부 호출 계약" },
+    { "id": "checked-history", "from": "api_gate", "to": "live_features", "label": "통과한 이력" },
+    { "id": "live-vector", "from": "live_features", "to": "inference", "label": "5분기 특징", "variant": "emphasis" },
+    { "id": "result", "from": "inference", "to": "response", "label": "성장률·사유", "variant": "emphasis" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "두 분기를 직접 추정",
+      "items": [
+        "2026Q2에서 Q3은 1분기 앞, Q4는 2분기 앞 모델을 각각 호출합니다.",
+        "Q3 추정치를 Q4 입력에 다시 넣지 않습니다.",
+        "목표는 서울 행정동·업종별 추정매출의 전년 동기 대비 증가율입니다."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "자료와 평가의 한계",
+      "items": [
+        "과거 시험은 나중에 확보한 수정 스냅샷으로 계산해 당시 공개본 성능을 증명하지 못합니다.",
+        "2026Q3·Q4 정답이 없으므로 이번 동일 입력 재학습은 오차 개선 근거가 아닙니다.",
+        "용도지역·인구는 이 단기 모델에 연결되지 않았습니다."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "제공 단계",
+      "items": [
+        "FastAPI는 로컬에서 확인했으며 Spring Boot·FE와 실제 연결은 아직 검증하지 않았습니다.",
+        "지원 범위 밖 또는 이력 부족은 성장률 null과 사유를 반환합니다.",
+        "인증 오류 401, 요청 형식 오류 422, 모델 장애 503을 구분합니다."
+      ]
+    }
+  ]
+}

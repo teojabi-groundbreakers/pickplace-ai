@@ -72,6 +72,26 @@ def install_fake_bundle(monkeypatch, directory, **metadata_updates):
     return bundle, loader
 
 
+def constructed_period_requests():
+    """같은 가상 지역의 Q2 위험도와 Q3 적합도를 독립 요청으로 확인한다."""
+    template = request_payload()
+    periods = ["2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]
+    rows = [
+        {
+            **template["history"][0],
+            "period": period,
+            "available_at": (quarter_end(period) + timedelta(days=7)).isoformat(),
+            "sales_amount": float(1_000_000 + index * 10_000),
+        }
+        for index, period in enumerate(periods)
+    ]
+    q2 = {**template, "base_period": "2026Q2", "as_of": "2026-11-16", "history": rows[:-1]}
+    q3_rows = [row.copy() for row in rows]
+    q3_rows[-1]["sales_amount"] = None
+    q3 = {**template, "base_period": "2026Q3", "as_of": "2026-11-16", "history": q3_rows}
+    return q2, q3
+
+
 def test_missing_artifact_preserves_basic_diagnosis(tmp_path):
     with TestClient(api.create_app(api.Settings(model_dir=tmp_path / "absent"))) as client:
         health = client.get("/health").json()
@@ -99,6 +119,26 @@ def test_authentication_is_enforced_when_configured(tmp_path):
         assert (
             client.get("/model-info", headers={"X-API-Key": "test-only-secret"}).status_code == 200
         )
+
+
+@pytest.mark.parametrize("method,path", [("GET", "/model-info"), ("POST", "/predict")])
+@pytest.mark.parametrize("api_key", [b"wrong-test-key", b"\xe9"])
+def test_invalid_api_key_returns_unauthorized(tmp_path, method, path, api_key):
+    config = api.Settings(model_dir=tmp_path / "absent", api_key="test-only-secret")
+    with TestClient(api.create_app(config), raise_server_exceptions=False) as client:
+        response = client.request(
+            method,
+            path,
+            headers=[(b"x-api-key", api_key)],
+            json=request_payload() if method == "POST" else None,
+        )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid or missing X-API-Key"
+
+
+def test_configured_api_key_must_be_ascii():
+    with pytest.raises(ValueError, match="PICKPLACE_API_KEY must be ASCII"):
+        api.create_app(api.Settings(api_key="테스트-키"))
 
 
 def test_production_requires_a_key():
@@ -177,6 +217,47 @@ def test_ended_target_is_not_presented_as_a_future_forecast(monkeypatch, tmp_pat
     with TestClient(api.create_app(api.Settings(model_dir=tmp_path / "model"))) as client:
         response = client.post("/predict", json=payload)
     assert response.json()["growth"]["reason"] == "target_not_future"
+    bundle.predict.assert_not_called()
+
+
+def test_two_period_requests_keep_each_diagnosis_on_its_requested_quarter(tmp_path):
+    q2_request, q3_request = constructed_period_requests()
+    with TestClient(api.create_app(api.Settings(model_dir=tmp_path / "absent"))) as client:
+        q2_response = client.post("/predict", json=q2_request)
+        q3_response = client.post("/predict", json=q3_request)
+
+    assert q2_response.status_code == q3_response.status_code == 200
+    q2 = q2_response.json()
+    q3 = q3_response.json()
+    assert q2["schema_version"] == q3["schema_version"] == "1.0"
+    assert q2["as_of"] == q3["as_of"] == "2026-11-16"
+    assert q2["base_period"] == "2026Q2"
+    assert q2["risk"]["status"] == "available"
+    assert q2["growth"]["target_period"] == "2026Q3"
+    assert q2["growth"]["reason"] == "target_not_future"
+    assert q2["growth"]["estimated_yoy_growth"] is None
+    assert q3["base_period"] == "2026Q3"
+    assert q3["fit"]["status"] == "available"
+    assert q3["risk"]["status"] == "unavailable"
+    assert q3["risk"]["reason"] == "missing_risk_indicators"
+    assert q3["risk"]["score"] is None
+
+
+def test_sales_free_latest_quarter_keeps_fit_when_growth_model_is_ready(monkeypatch, tmp_path):
+    bundle, _ = install_fake_bundle(monkeypatch, tmp_path / "model")
+    _, q3_request = constructed_period_requests()
+    with TestClient(api.create_app(api.Settings(model_dir=tmp_path / "model"))) as client:
+        response = client.post("/predict", json=q3_request)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["base_period"] == "2026Q3"
+    assert body["fit"]["status"] == "available"
+    assert body["risk"]["reason"] == "missing_risk_indicators"
+    assert body["growth"]["target_period"] == "2026Q4"
+    assert body["growth"]["status"] == "unavailable"
+    assert body["growth"]["estimated_yoy_growth"] is None
+    assert body["growth"]["reason"] == "missing_sales"
     bundle.predict.assert_not_called()
 
 

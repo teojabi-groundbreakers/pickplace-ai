@@ -159,3 +159,40 @@ def build_training_frame(observations: list[Observation]) -> pd.DataFrame:
         .sort_values(["target_period", "region_code_system", "region_code", "industry_code"])
         .reset_index(drop=True)
     )
+
+
+GYEONGGI_RESEARCH_FEATURES = (
+    "sales_relative_to_t_minus3",
+    "sales_qoq",
+    "sales_prior_qoq",
+    "sales_cv4",
+    "base_quarter",
+)
+
+
+def gyeonggi_four_quarter_features(sales: np.ndarray, base_quarter: int) -> pd.DataFrame:
+    """Unit-neutral research features from complete t-3..t quarters only.
+
+    The caller must check quarterly completeness and retain the true snapshot date.
+    This does not authorize using unverified regional or industry crosswalks.
+    """
+    values = np.asarray(sales, dtype=float)
+    if values.ndim != 2 or values.shape[1] != 4:
+        raise ValueError("Expected a two-dimensional array of four quarterly sales values")
+    if not np.isfinite(values).all() or (values < 0).any():
+        raise ValueError("Quarterly values must be finite and nonnegative")
+    if base_quarter not in (1, 2, 3, 4):
+        raise ValueError("base_quarter must be 1 through 4")
+    if (values[:, 0] <= 0).any() or (values[:, 1] <= 0).any() or (values[:, 2] <= 0).any():
+        raise ValueError("Feature denominators must be positive")
+    means = values.mean(axis=1)
+    return pd.DataFrame(
+        {
+            "sales_relative_to_t_minus3": values[:, 3] / values[:, 0] - 1,
+            "sales_qoq": values[:, 3] / values[:, 2] - 1,
+            "sales_prior_qoq": values[:, 2] / values[:, 1] - 1,
+            "sales_cv4": values.std(axis=1) / means,
+            "base_quarter": float(base_quarter),
+        },
+        columns=GYEONGGI_RESEARCH_FEATURES,
+    )
