@@ -2,6 +2,7 @@
 
 | 문서 | 내용 |
 |---|---|
+| [SEOUL_NEAR_TERM_RETRAIN_2026-11-13.md](SEOUL_NEAR_TERM_RETRAIN_2026-11-13.md) | 서울 단기 모델 재학습 기록과 학습·FastAPI 흐름 시각자료 |
 | [AI_EXPERT_CONSULTATION_2026-11-09.md](AI_EXPERT_CONSULTATION_2026-11-09.md) | 전문가 자문 기록과 후속 검토 항목 |
 | [VWORLD_ZONING_PREPARATION.md](VWORLD_ZONING_PREPARATION.md) | VWorld 공간자료 원본 확인 준비 |
 | [REGION_PROFILE_FE_BE_HANDOFF.md](REGION_PROFILE_FE_BE_HANDOFF.md) | 작성일 기준 지역 특성·상권 진단 FE·BE 후속 설계 |

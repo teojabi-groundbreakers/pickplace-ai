@@ -70,3 +70,9 @@ Thumbs.db
 
 # Deliberately tracked: requirements.lock, .env.example, source/tests/docs,
 # and the explicitly synthetic JSON examples in examples/.
+
+# Archify 검증·전달 로그에는 로컬 경로가 포함될 수 있다.
+.archify/**/*.browser-check.json
+.archify/**/*.delivery.json
+.archify/**/*.finalize.json
+.archify/**/*.finalize-summary.json

@@ -16,7 +16,7 @@ services:
       OPENBLAS_NUM_THREADS: "1"
     volumes:
       - type: bind
-        source: ${PICKPLACE_NEAR_TERM_MODEL_SOURCE:-./artifacts/seoul-near-term-2026q2-20261104}
+        source: ${PICKPLACE_NEAR_TERM_MODEL_SOURCE:-./artifacts/seoul-near-term-2026q2-20261113}
         target: /app/near-term-model
         read_only: true
         bind:

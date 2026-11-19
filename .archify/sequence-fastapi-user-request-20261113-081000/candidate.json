@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "사용자 요청에서 FastAPI 예측 응답까지",
+    "locale": "ko",
+    "output": ".archify/sequence-fastapi-user-request-20261113-081000/fastapi-user-request.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/teojabi-groundbreakers/pickplace-ai.git",
+      "provider": "github",
+      "revision": "f35ca702131ca1242ff6f9ed8c785a66de484fee"
+    }
+  },
+  "participants": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "사용자",
+      "sublabel": "분석 시작",
+      "sources": [
+        {
+          "path": "docs/BACKEND_CONTRACT.md",
+          "line": 3,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "fe",
+      "type": "frontend",
+      "label": "React FE",
+      "sublabel": "연동 예정",
+      "sources": [
+        {
+          "path": "docs/BACKEND_CONTRACT.md",
+          "line": 8,
+          "end_line": 13
+        },
+        {
+          "path": "docs/NEAR_TERM_API.md",
+          "line": 52
+        }
+      ]
+    },
+    {
+      "id": "be",
+      "type": "backend",
+      "label": "Spring Boot",
+      "sublabel": "연동 예정",
+      "sources": [
+        {
+          "path": "docs/NEAR_TERM_API.md",
+          "line": 19,
+          "end_line": 21
+        },
+        {
+          "path": "docs/NEAR_TERM_API.md",
+          "line": 36,
+          "end_line": 46
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "연구용 내부 API",
+      "sources": [
+        {
+          "path": "src/pickplace_ai/near_term_api.py",
+          "line": 336,
+          "end_line": 379
+        },
+        {
+          "path": "src/pickplace_ai/near_term_api.py",
+          "line": 381,
+          "end_line": 410
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "예측 처리",
+      "sublabel": "범위·이력·특징",
+      "sources": [
+        {
+          "path": "src/pickplace_ai/near_term_api.py",
+          "line": 231,
+          "end_line": 277
+        },
+        {
+          "path": "src/pickplace_ai/near_term_api.py",
+          "line": 279,
+          "end_line": 333
+        }
+      ]
+    },
+    {
+      "id": "artifacts",
+      "type": "database",
+      "label": "모델 산출물",
+      "sublabel": "모델·요약·CSV",
+      "sources": [
+        {
+          "path": "src/pickplace_ai/near_term_api.py",
+          "line": 80,
+          "end_line": 107
+        },
+        {
+          "path": "src/pickplace_ai/near_term_api.py",
+          "line": 192,
+          "end_line": 229
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 248,
+      "label": "서버 시작 시"
+    },
+    {
+      "from": 272,
+      "to": 430,
+      "label": "사용자 분석 요청"
+    },
+    {
+      "from": 454,
+      "to": 590,
+      "label": "FastAPI 검사·추론"
+    },
+    {
+      "from": 610,
+      "to": 785,
+      "label": "결과 전달"
+    }
+  ],
+  "messages": [
+    {
+      "id": "startup_read",
+      "from": "api",
+      "to": "artifacts",
+      "y": 160,
+      "label": "기동 시 모델 파일 검증",
+      "variant": "security",
+      "note": "SHA·코드·실행 환경을 확인하고 모델을 한 번 로드"
+    },
+    {
+      "id": "startup_ready",
+      "from": "artifacts",
+      "to": "api",
+      "y": 228,
+      "label": "검증된 모델 데이터",
+      "variant": "return",
+      "note": "실패하면 model_ready=false; 추론은 503"
+    },
+    {
+      "id": "choose",
+      "from": "user",
+      "to": "fe",
+      "y": 290,
+      "label": "지역·업종 분석 요청",
+      "variant": "default",
+      "note": "서비스 화면의 예정된 흐름"
+    },
+    {
+      "id": "fe_to_be",
+      "from": "fe",
+      "to": "be",
+      "y": 342,
+      "label": "분석 요청",
+      "variant": "default",
+      "note": "원래 지역·업종 코드 보존"
+    },
+    {
+      "id": "be_to_api",
+      "from": "be",
+      "to": "api",
+      "y": 400,
+      "label": "내부 예측 요청",
+      "variant": "emphasis",
+      "note": "POST /research/near-term/predict · X-API-Key · 서울 코드·CS 업종·5분기 이력·as_of"
+    },
+    {
+      "id": "api_to_core",
+      "from": "api",
+      "to": "core",
+      "y": 488,
+      "label": "검사 통과 후 추론",
+      "variant": "emphasis",
+      "note": "인증 실패 401, 형식 오류 422, 모델 미준비 503은 여기서 종료"
+    },
+    {
+      "id": "core_to_api",
+      "from": "core",
+      "to": "api",
+      "y": 558,
+      "label": "성장률 또는 null+사유",
+      "variant": "return",
+      "note": "범위·이력 확인 → 특징 생성 → Q3/Q4 모델 선택; 지원 불가는 null+reason"
+    },
+    {
+      "id": "api_to_be",
+      "from": "api",
+      "to": "be",
+      "y": 630,
+      "label": "HTTP 200 연구용 JSON",
+      "variant": "return",
+      "note": "status=available 또는 unavailable, 경고와 기준 시점 포함"
+    },
+    {
+      "id": "be_to_fe",
+      "from": "be",
+      "to": "fe",
+      "y": 695,
+      "label": "진단 결과 조합",
+      "variant": "return",
+      "note": "BE 연동·부분 결과 조합은 아직 미검증"
+    },
+    {
+      "id": "fe_to_user",
+      "from": "fe",
+      "to": "user",
+      "y": 750,
+      "label": "성장률 또는 사유 표시",
+      "variant": "return",
+      "note": "실제 화면 연동은 아직 미검증"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "구현과 연결 상태",
+      "items": [
+        "현재 검증된 것은 FastAPI의 로컬 호출과 응답입니다.",
+        "React → Spring Boot → FastAPI는 예정된 서비스 호출 계약이며 실제 연결은 미검증입니다.",
+        "로컬 테스트에서는 FastAPI를 직접 호출할 수 있지만 서비스 사용자 경로는 Spring Boot를 거칩니다."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "예측 입력과 결과",
+      "items": [
+        "BE는 공식 코드 대응을 확인하고 동일 지역·업종의 2025Q2~2026Q2 연속 이력을 전달해야 합니다.",
+        "Q3은 1분기 앞, Q4는 2분기 앞 모델을 선택합니다. 결과 0.05는 전년 동기 대비 5% 증가 추정입니다.",
+        "용도지역·인구는 이 서울 단기 모델의 입력이 아닙니다."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "결과를 낼 수 없는 경우",
+      "items": [
+        "유효한 요청이어도 지원 범위·이력이 부족하면 HTTP 200에 성장률 null과 reason을 반환합니다.",
+        "인증 실패 401, 요청 형식 오류 422, 모델 장애 503은 구분합니다.",
+        "이 단기 API는 저매출을 경고로 표시하지만 급변 매출 보류 정책은 적용하지 않습니다."
+      ]
+    }
+  ]
+}
