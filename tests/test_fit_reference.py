@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from pickplace_ai import api, fit_reference
 from pickplace_ai.artifacts import file_sha256
+from pickplace_ai.periods import quarter_end
 from pickplace_ai.schemas import PredictionRequest
 
 
@@ -199,3 +200,167 @@ def test_environment_reference_configuration_is_optional(tmp_path, monkeypatch):
     assert api.Settings.from_env().fit_reference_dir is None
     monkeypatch.setenv("PICKPLACE_SEOUL_FIT_REFERENCE_DIR", str(tmp_path / "reference"))
     assert api.Settings.from_env().fit_reference_dir == tmp_path / "reference"
+
+
+def write_quarter_reference(root, period, *, rows=None, available_at="2026-11-20"):
+    reference_date = quarter_end(period).isoformat()
+    return write_reference(
+        root,
+        rows=rows,
+        base_period=period,
+        reference_date=reference_date,
+        area_reference_date=reference_date,
+        population_reference_date=reference_date,
+        mapping_reference_date=reference_date,
+        stores_period=period,
+        available_at=available_at,
+    )
+
+
+def collection_payload(period="2025Q2", **updates):
+    raw = payload(period=period, **updates)
+    # 누락 분기 요청도 검증할 수 있도록 원천 관측일을 해당 분기 말로 명시한다.
+    raw["history"][0]["available_at"] = quarter_end(period).isoformat()
+    return raw
+
+
+def write_two_quarters(parent):
+    parent.mkdir()
+    write_quarter_reference(parent / "2025Q2", "2025Q2", available_at="2026-11-19")
+    write_quarter_reference(
+        parent / "2026Q2",
+        "2026Q2",
+        rows=[
+            ("11110511", "CS100010", 20, 10_000, 2_000_000),
+            ("11110512", "CS100010", 10, 1000, 1_000_000),
+            ("11110514", "CS100010", 10, 500, 1_000_000),
+        ],
+    )
+    return parent
+
+
+def test_single_reference_directory_reports_its_one_valid_period(tmp_path):
+    root = write_reference(tmp_path / "single-reference")
+    settings = api.Settings(model_dir=tmp_path / "absent-model", fit_reference_dir=root)
+    with TestClient(api.create_app(settings)) as client:
+        health = client.get("/health").json()
+        result = client.post("/predict", json=payload()).json()["fit_indicators"]
+    assert health["fit_reference_ready"] is True
+    assert health["fit_reference_periods"] == ["2025Q2"]
+    assert result["residents_per_store"]["value"] == 100
+
+
+def test_collection_routes_exact_period_and_does_not_pool_reference_ranks(tmp_path):
+    root = write_two_quarters(tmp_path / "references")
+    settings = api.Settings(model_dir=tmp_path / "absent-model", fit_reference_dir=root)
+    with TestClient(api.create_app(settings)) as client:
+        assert client.get("/health").json()["fit_reference_periods"] == ["2025Q2", "2026Q2"]
+        older = client.post("/predict", json=collection_payload("2025Q2"))
+        newer = client.post("/predict", json=collection_payload("2026Q2"))
+    assert older.status_code == newer.status_code == 200
+    old_fit = older.json()["fit_indicators"]
+    new_fit = newer.json()["fit_indicators"]
+    assert old_fit["base_period"] == "2025Q2" and new_fit["base_period"] == "2026Q2"
+    assert old_fit["reference_date"] == "2025-06-30"
+    assert new_fit["reference_date"] == "2026-06-30"
+    assert old_fit["cohort_size"] == 2 and new_fit["cohort_size"] == 3
+    assert old_fit["resident_population"] == 1000
+    assert new_fit["resident_population"] == 10_000
+    assert old_fit["residents_per_store"]["value"] == 100
+    assert new_fit["residents_per_store"]["value"] == 500
+    assert old_fit["residents_per_store"]["percentile"] == 0
+    assert new_fit["residents_per_store"]["percentile"] == 100
+
+
+@pytest.mark.parametrize(
+    "period,updates,reason",
+    [
+        ("2025Q4", {}, "fit_reference_period_mismatch"),
+        ("2026Q2", {"as_of": "2026-11-19"}, "fit_reference_after_as_of"),
+        (
+            "2026Q2",
+            {"region": "11110513", "industry": "CS100005"},
+            "fit_scope_not_in_reference",
+        ),
+    ],
+)
+def test_collection_has_no_other_period_or_request_data_fallback(tmp_path, period, updates, reason):
+    root = write_two_quarters(tmp_path / "references")
+    settings = api.Settings(model_dir=tmp_path / "absent-model", fit_reference_dir=root)
+    with TestClient(api.create_app(settings)) as client:
+        response = client.post("/predict", json=collection_payload(period, **updates))
+    assert response.status_code == 200
+    result = response.json()["fit_indicators"]
+    assert result["base_period"] == period
+    assert result["resident_population"] is None
+    assert result["reference_date"] is None
+    for name in fit_reference.UNITS:
+        assert result[name]["status"] == "unavailable"
+        assert result[name]["value"] is None and result[name]["percentile"] is None
+        assert result[name]["reason"] == reason
+
+
+def test_corrupt_quarter_does_not_disable_another_valid_quarter(tmp_path):
+    root = write_two_quarters(tmp_path / "references")
+    (root / "2026Q2" / "manifest.json").write_text("{broken fixture metadata")
+    settings = api.Settings(model_dir=tmp_path / "absent-model", fit_reference_dir=root)
+    with TestClient(api.create_app(settings)) as client:
+        health = client.get("/health").json()
+        valid = client.post("/predict", json=collection_payload("2025Q2"))
+        invalid = client.post("/predict", json=collection_payload("2026Q2"))
+    assert health["fit_reference_ready"] is True
+    assert health["fit_reference_periods"] == ["2025Q2"]
+    assert valid.status_code == invalid.status_code == 200
+    assert valid.json()["fit_indicators"]["resident_population"] == 1000
+    assert invalid.json()["fit_indicators"]["residents_per_store"]["reason"] == (
+        "fit_reference_invalid"
+    )
+
+
+def test_manifest_period_must_match_its_named_directory(tmp_path):
+    root = tmp_path / "references"
+    root.mkdir()
+    # 이름만 2025Q2인 2026Q2 표는 과거 표로 등록하거나 다른 표를 덮어쓸 수 없다.
+    write_quarter_reference(root / "2025Q2", "2026Q2")
+    write_quarter_reference(
+        root / "2026Q2", "2026Q2", rows=[("11110511", "CS100010", 20, 10_000, 2_000_000)]
+    )
+    settings = api.Settings(model_dir=tmp_path / "absent-model", fit_reference_dir=root)
+    with TestClient(api.create_app(settings)) as client:
+        health = client.get("/health").json()
+        invalid = client.post("/predict", json=collection_payload("2025Q2"))
+        valid = client.post("/predict", json=collection_payload("2026Q2"))
+    assert health["fit_reference_periods"] == ["2026Q2"]
+    assert invalid.status_code == valid.status_code == 200
+    assert invalid.json()["fit_indicators"]["residents_per_store"]["reason"] == (
+        "fit_reference_invalid"
+    )
+    assert valid.json()["fit_indicators"]["resident_population"] == 10_000
+
+
+def test_nonquarter_notes_and_missing_unrelated_artifacts_are_ignored(tmp_path):
+    root = write_two_quarters(tmp_path / "references")
+    (root / "notes").mkdir()
+    (root / "notes" / "manifest.json").write_text("not a reference fixture")
+    (root / "archive_2025Q2").mkdir()
+    (root / "README.md").write_text("Fixture notes; no dataset or credentials.")
+    settings = api.Settings(model_dir=tmp_path / "absent-model", fit_reference_dir=root)
+    with TestClient(api.create_app(settings)) as client:
+        health = client.get("/health").json()
+        response = client.post("/predict", json=collection_payload("2026Q2"))
+    assert health["fit_reference_ready"] is True
+    assert health["fit_reference_periods"] == ["2025Q2", "2026Q2"]
+    assert response.status_code == 200
+    assert response.json()["fit_indicators"]["resident_population"] == 10_000
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_health_has_empty_period_list_without_a_valid_reference(tmp_path, configured):
+    settings = api.Settings(
+        model_dir=tmp_path / "absent-model",
+        fit_reference_dir=tmp_path / "absent-reference" if configured else None,
+    )
+    with TestClient(api.create_app(settings)) as client:
+        health = client.get("/health").json()
+    assert health["fit_reference_ready"] is False
+    assert health["fit_reference_periods"] == []

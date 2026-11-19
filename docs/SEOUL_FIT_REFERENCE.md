@@ -29,7 +29,7 @@ SGIS ZIP에 함께 들어 있는 인구 통계의 기준연도는 2024년이다.
 
 ## FastAPI 응답
 
-기본 `POST /predict` v1.0의 `fit_indicators`에 두 값을 반환한다. 조회 조건은 공식 `seoul-adstrd` 원본 지역·업종 코드, 참조표와 동일한 `base_period`, 실제 참조표 확보일 이후의 `as_of`다. 요청의 인구·점포 수·면적을 참조표의 원천값 대신 사용하지 않는다. 기존 진단 및 성장 결과는 별도로 계산한다.
+기본 `POST /predict` v1.0의 `fit_indicators`에 두 값을 반환한다. 조회 조건은 공식 `seoul-adstrd` 원본 지역·업종 코드, 참조표와 동일한 `base_period`, 실제 참조표 확보일 또는 그 이후의 `as_of`다. 요청의 인구·점포 수·면적을 참조표의 원천값 대신 사용하지 않는다. 기존 진단 및 성장 결과는 별도로 계산한다.
 
 | 경로 | 값 | 단위 |
 |---|---|---|
@@ -47,6 +47,22 @@ SGIS ZIP에 함께 들어 있는 인구 통계의 기준연도는 2024년이다.
 | 요청 기준 분기가 다르거나 분석일 이후 확보된 자료 | `fit_reference_period_mismatch`, `fit_reference_after_as_of` |
 | 비교표에 해당 지역·업종이 없음 | `fit_scope_not_in_reference` |
 | 해당 업종의 참조 행정동이 하나뿐임 | `insufficient_reference_areas`로 백분위만 null |
+
+## FastAPI에 분기별 참조표 연결
+
+`PICKPLACE_SEOUL_FIT_REFERENCE_DIR`에는 개별 참조표 디렉터리 또는 여러 분기 디렉터리를 담은 상위 경로를 설정할 수 있다. 분기 폴더명(`YYYYQn`)과 매니페스트의 `base_period`가 일치해야 한다.
+
+```text
+fit-references/
+  2025Q2/
+    manifest.json
+    reference.csv
+  2026Q2/          # 원천 검증 후 생성
+    manifest.json
+    reference.csv
+```
+
+FastAPI는 요청의 `base_period`와 정확히 일치하는 표로 두 값과 백분위를 계산한다. 해당 분기가 없으면 `fit_reference_period_mismatch`, 해당 분기의 파일이나 지문 검증에 실패하면 `fit_reference_invalid`를 반환한다. `GET /health`의 `fit_reference_periods`는 시작 시 로드한 분기 목록이다. 일부 분기의 로딩이 실패해도 정상 분기는 조회할 수 있다. 이 작업 환경에서는 `data/processed/seoul/fit-references/`에 기존 2025Q2 표를 연결했다.
 
 ## 참조표 만들기
 

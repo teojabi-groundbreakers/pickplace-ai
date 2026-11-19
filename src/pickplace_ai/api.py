@@ -20,7 +20,11 @@ from fastapi.responses import JSONResponse
 from pickplace_ai import __version__
 from pickplace_ai.artifacts import ModelBundle, load_bundle
 from pickplace_ai.features import FeatureUnavailable, feature_record
-from pickplace_ai.fit_reference import FitReference, unavailable_fit
+from pickplace_ai.fit_reference import (
+    load_fit_references,
+    supports_fit_scope,
+    unavailable_fit,
+)
 from pickplace_ai.periods import quarter_end, shift_quarter
 from pickplace_ai.risk_indicators import observe_risk_indicators
 from pickplace_ai.schemas import PredictionRequest
@@ -135,15 +139,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.bundle = None
         application.state.model_reason = "model_not_found"
-        application.state.fit_reference = None
+        application.state.fit_references = {}
+        application.state.invalid_fit_periods = set()
         application.state.fit_reference_reason = "fit_reference_not_configured"
         if config.fit_reference_dir is not None:
-            try:
-                application.state.fit_reference = FitReference(config.fit_reference_dir)
+            application.state.fit_reference_reason = "fit_reference_invalid"
+            references, invalid_periods = load_fit_references(config.fit_reference_dir)
+            application.state.fit_references = references
+            application.state.invalid_fit_periods = invalid_periods
+            if references:
                 application.state.fit_reference_reason = None
-            except (OSError, ValueError, ArithmeticError, KeyError, TypeError, AttributeError):
-                application.state.fit_reference_reason = "fit_reference_invalid"
-                logger.warning("Seoul fit reference is unavailable or invalid")
         if config.model_dir.is_dir():
             try:
                 bundle = load_bundle(config.model_dir)
@@ -155,7 +160,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.model_reason = "model_load_failed"
         yield
         application.state.bundle = None
-        application.state.fit_reference = None
+        application.state.fit_references.clear()
+        application.state.invalid_fit_periods.clear()
 
     application = FastAPI(
         title="PickPlace Internal AI API",
@@ -198,8 +204,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "basic_diagnosis_ready": True,
             "growth_model_ready": reason is None,
             "growth_model_reason": reason,
-            "fit_reference_ready": request.app.state.fit_reference is not None,
+            "fit_reference_ready": bool(request.app.state.fit_references),
             "fit_reference_reason": request.app.state.fit_reference_reason,
+            "fit_reference_periods": sorted(request.app.state.fit_references),
             "authentication_enabled": config.api_key is not None,
         }
 
@@ -284,12 +291,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except Exception:
                     logger.exception("Model inference failed")
                     growth["reason"] = "model_inference_failed"
-        fit_reference = request.app.state.fit_reference
-        fit_indicators = (
-            fit_reference.indicators(payload)
-            if fit_reference is not None
-            else unavailable_fit(payload.base_period, request.app.state.fit_reference_reason)
-        )
+        fit_reference = request.app.state.fit_references.get(payload.base_period)
+        if fit_reference is not None:
+            fit_indicators = fit_reference.indicators(payload)
+        else:
+            reason = request.app.state.fit_reference_reason
+            if reason is None:
+                if not supports_fit_scope(payload):
+                    reason = "unsupported_fit_reference_scope"
+                elif payload.base_period in request.app.state.invalid_fit_periods:
+                    reason = "fit_reference_invalid"
+                else:
+                    reason = "fit_reference_period_mismatch"
+            fit_indicators = unavailable_fit(payload.base_period, reason)
         return {
             "schema_version": "1.0",
             "region_code": payload.region_code,

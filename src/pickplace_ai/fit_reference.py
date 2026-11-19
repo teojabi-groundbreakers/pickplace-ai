@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import json
+import logging
 import math
 import re
 from bisect import bisect_left, bisect_right
@@ -17,6 +18,10 @@ KIND = "seoul_date_aligned_fit_reference_v1"
 CODE_SYSTEM = "seoul-adstrd"
 ROW_FIELDS = ("region_code", "industry_code", "store_count", "resident_population", "area_m2")
 UNITS = {"residents_per_store": "persons_per_store", "stores_per_km2": "stores_per_km2"}
+
+logger = logging.getLogger(__name__)
+_ARTIFACT_ERRORS = (OSError, ValueError, ArithmeticError, KeyError, TypeError, AttributeError)
+_PERIOD_DIRECTORY = re.compile(r"[0-9]{4}Q[1-4]$")
 
 
 def validate_metadata(manifest: dict) -> None:
@@ -45,6 +50,10 @@ def validate_metadata(manifest: dict) -> None:
             r"[0-9a-f]{64}", source["sha256"]
         ):
             raise ValueError("Missing official reference source or SHA-256")
+
+
+def supports_fit_scope(request: PredictionRequest) -> bool:
+    return request.source_kind == "official" and request.region_code_system == CODE_SYSTEM
 
 
 def rank_percentile(value: float, sorted_values: list[float]) -> float | None:
@@ -101,7 +110,7 @@ class FitReference:
             density.sort()
 
     def indicators(self, request: PredictionRequest) -> dict:
-        if request.source_kind != "official" or request.region_code_system != CODE_SYSTEM:
+        if not supports_fit_scope(request):
             return unavailable_fit(request.base_period, "unsupported_fit_reference_scope")
         if request.base_period != self.manifest["base_period"]:
             return unavailable_fit(request.base_period, "fit_reference_period_mismatch")
@@ -135,6 +144,34 @@ class FitReference:
                 "percentile_reason": "insufficient_reference_areas" if percentile is None else None,
             }
         return result
+
+
+def load_fit_references(root: Path) -> tuple[dict[str, FitReference], set[str]]:
+    """단일 참조표 또는 분기별 디렉터리에서 확인된 참조표를 로드한다."""
+    try:
+        if (root / "manifest.json").exists() or (root / "reference.csv").exists():
+            reference = FitReference(root)
+            return {reference.manifest["base_period"]: reference}, set()
+        candidates = list(root.iterdir())
+    except _ARTIFACT_ERRORS:
+        logger.warning("Seoul fit reference is unavailable or invalid")
+        return {}, set()
+
+    references, invalid = {}, set()
+    for path in candidates:
+        period = path.name
+        if not _PERIOD_DIRECTORY.fullmatch(period):
+            continue
+        try:
+            reference = FitReference(path)
+            if reference.manifest["base_period"] != period:
+                raise ValueError("Fit reference quarter does not match its directory")
+        except _ARTIFACT_ERRORS:
+            invalid.add(period)
+            logger.warning("Seoul fit reference is unavailable or invalid for %s", period)
+        else:
+            references[period] = reference
+    return references, invalid
 
 
 def unavailable_fit(base_period: str, reason: str) -> dict:

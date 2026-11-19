@@ -71,7 +71,7 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 
 ## 운영·통합
 
-- `PICKPLACE_SEOUL_FIT_REFERENCE_DIR`에 검증된 서울 비교표 디렉터리를 설정할 수 있다. 미설정 시 `fit_indicators`의 두 값과 백분위는 null이다.
+- `PICKPLACE_SEOUL_FIT_REFERENCE_DIR`에 검증된 서울 비교표 디렉터리 또는 `YYYYQn`별 비교표를 담은 상위 디렉터리를 설정할 수 있다. 미설정 시 `fit_indicators`의 두 값과 백분위는 null이다.
 - `PICKPLACE_MODEL_DIR`: 배포할 모델 산출물 디렉터리
 - `PICKPLACE_API_KEY`: 내부 요청 키. 설정하면 `/predict`·`/model-info` 호출의 `X-API-Key` 헤더에 함께 전달한다.
 - `PICKPLACE_REQUIRE_API_KEY`: 운영 시 `true`. 비밀키가 비어 있으면 시작을 중단한다. 로컬 개발의 무키 실행과 구분한다.
@@ -80,7 +80,7 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 
 제공 Compose는 AI 컨테이너 준비용이며 운영 내부키를 요구한다. Spring Boot 컨테이너도 `pickplace-ai-internal` 네트워크에 연결한 후 `http://ai-api:8000`으로 호출한다. 다른 Compose에서 이미 만든 네트워크를 함께 사용한다면 `external: true` 등 실제 네트워크 연결 구성을 확인한다. AI 포트를 호스트나 외부 인터넷에 공개하지 않는다. Spring Boot는 AI 장애 시 통계 결과를 유지하고 AI 부분만 사용 불가로 표시한다.
 
-`/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다. 서울 참조표 상태는 `fit_reference_ready`와 `fit_reference_reason`으로 확인한다.
+`/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다. 서울 참조표 상태와 로드한 분기는 `fit_reference_ready`, `fit_reference_reason`, `fit_reference_periods`로 확인한다.
 
 외부 SGIS 경계 조회, 프론트엔드 직접 연결 및 전국 데이터 수집 API는 이 서비스의 초기 구현 범위에 포함하지 않는다.
 
