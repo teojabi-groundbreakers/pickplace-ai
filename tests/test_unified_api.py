@@ -2,9 +2,7 @@
 
 import hashlib
 import json
-from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import joblib
 import numpy as np
@@ -33,7 +31,8 @@ def root(tmp_path: Path, monkeypatch) -> Path:
     meta = {
         "artifact_kind": train_unified_growth.KIND,
         "purpose": "retrospective_research_only_not_service",
-        "created_at_utc": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),
+        # 요청일과 합성 모델 생성일을 함께 고정해 실행 날짜가 검증 순서를 바꾸지 않게 한다.
+        "created_at_utc": "2026-11-09T00:00:00+09:00",
         "source_code_systems": {
             "seoul": "seoul-adstrd",
             "gyeonggi": "gyeonggi-admdong-10-unverified",
@@ -140,6 +139,24 @@ def test_unavailable_has_null_and_reason(root, mutation, reason):
         assert body["status"] == "unavailable" and body["estimated_yoy_growth"] is None
         assert body["reason"] == reason
         assert body["risk_details"] == []
+
+
+def test_request_before_model_creation_is_still_unavailable(root):
+    metadata_path = root / "metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    metadata["created_at_utc"] = "2026-11-10T00:00:00+09:00"
+    metadata_path.write_text(json.dumps(metadata))
+
+    with TestClient(create_app(root, "test-key")) as client:
+        response = client.post(
+            "/research/unified/predict", json=payload(), headers={"X-API-Key": "test-key"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "unavailable"
+    assert body["reason"] == "as_of_before_model_snapshot"
+    assert body["estimated_yoy_growth"] is None
 
 
 def test_missing_duplicate_and_zero_are_not_coerced(root):
