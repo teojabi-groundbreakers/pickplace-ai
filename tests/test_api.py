@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 import pickplace_ai.api as api
 from pickplace_ai.periods import quarter_end
+from pickplace_ai.schemas import Observation
+from pickplace_ai.scoring import diagnose
 
 
 def request_payload(source_kind="official"):
@@ -349,3 +351,43 @@ def test_explanation_failure_keeps_the_valid_growth_prediction(monkeypatch, tmp_
     assert body["growth"]["estimated_yoy_growth"] == 0.05
     assert body["growth"]["explanations"] == []
     assert "growth_explanations_unavailable" in body["warnings"]
+
+
+@pytest.mark.parametrize(
+    "changed_field,changed_value,sales_reason,closure_reason",
+    [
+        ("sales_amount", None, "missing_current_sales", None),
+        ("closing_count", None, None, "missing_closing_count"),
+        ("closing_count", 21, None, "closing_count_exceeds_store_count"),
+    ],
+)
+def test_observed_indicators_are_partial_and_preserve_legacy_diagnosis(
+    tmp_path, changed_field, changed_value, sales_reason, closure_reason
+):
+    payload = request_payload()
+    payload["history"][-1][changed_field] = changed_value
+    original = diagnose(
+        [Observation.model_validate(row) for row in payload["history"]], payload["base_period"]
+    )
+    with TestClient(api.create_app(api.Settings(model_dir=tmp_path / "absent"))) as client:
+        response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "1.0"
+    assert body["risk"] == original["risk"]
+    assert body["fit"] == original["fit"]
+    assert body["policy_version"] == original["policy_version"]
+    assert body["growth"]["reason"] == "model_not_found"
+    indicators = body["risk_indicators"]
+    for name, reason in (("sales_yoy_change", sales_reason), ("closure_burden", closure_reason)):
+        indicator = indicators[name]
+        assert indicator["base_period"] == body["base_period"]
+        assert indicator["unit"] == "ratio"
+        assert indicator["reason"] == reason
+        if reason:
+            assert indicator["status"] == "unavailable"
+            assert indicator["value"] is None
+        else:
+            assert indicator["status"] == "available"
+            assert indicator["value"] == pytest.approx(0.04 if name == "sales_yoy_change" else 0.05)
+    assert indicators["sales_yoy_change"]["comparison_period"] == "2024Q1"

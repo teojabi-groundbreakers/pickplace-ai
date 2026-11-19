@@ -21,6 +21,7 @@ from pickplace_ai import __version__
 from pickplace_ai.artifacts import ModelBundle, load_bundle
 from pickplace_ai.features import FeatureUnavailable, feature_record
 from pickplace_ai.periods import quarter_end, shift_quarter
+from pickplace_ai.risk_indicators import observe_risk_indicators
 from pickplace_ai.schemas import PredictionRequest
 from pickplace_ai.scoring import diagnose
 
@@ -279,6 +280,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "growth": growth,
             "risk": diagnosis["risk"],
             "fit": diagnosis["fit"],
+            "risk_indicators": observe_risk_indicators(payload.history, payload.base_period),
             "policy_version": diagnosis["policy_version"],
             "warnings": warnings,
         }
