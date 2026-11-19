@@ -2,6 +2,8 @@
 
 | 문서 | 내용 |
 |---|---|
+| [VWORLD_ZONING_PREPARATION.md](VWORLD_ZONING_PREPARATION.md) | VWorld 공간자료 원본 확인 준비 |
+| [REGION_PROFILE_FE_BE_HANDOFF.md](REGION_PROFILE_FE_BE_HANDOFF.md) | 작성일 기준 지역 특성·상권 진단 FE·BE 후속 설계 |
 | [SEOUL_ACTIVITY_MODEL_RESEARCH.md](SEOUL_ACTIVITY_MODEL_RESEARCH.md) | 인구·활동 특징의 매출 예측 비교 연구 |
 | [SEOUL_INDICATORS_API.md](SEOUL_INDICATORS_API.md) | 서울 분기별 원본 현황 연구 API |
 | [FE_DIAGNOSIS_DATA_AUDIT.md](FE_DIAGNOSIS_DATA_AUDIT.md) | 작성일 기준 FE 진단 항목과 자료 확보 상태 점검 |
