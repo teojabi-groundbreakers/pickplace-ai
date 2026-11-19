@@ -2,6 +2,7 @@
 
 | 문서 | 내용 |
 |---|---|
+| [SEOUL_FIT_CRITERIA.md](SEOUL_FIT_CRITERIA.md) | 서울 면적·상주인구 기준 시점과 3개 업종의 적합도 기준 비교 |
 | [SEOUL_SCORE_AUDIT.md](SEOUL_SCORE_AUDIT.md) | 서울 위험도·적합도 초안의 업종별 분포, 후속 관측 대조와 민감도 |
 | [SEOUL_ROLLING_EVALUATION.md](SEOUL_ROLLING_EVALUATION.md) | 서울 서비스 업종의 여러 과거 분기 평가·후보 비교·실행 결과 |
 | [SEOUL_NEAR_TERM_RETRAIN_2026-11-13.md](SEOUL_NEAR_TERM_RETRAIN_2026-11-13.md) | 서울 단기 모델 재학습 기록과 학습·FastAPI 흐름 시각자료 |
