@@ -27,6 +27,35 @@ SGIS ZIP에 함께 들어 있는 인구 통계의 기준연도는 2024년이다.
 
 청운효자동 커피 전문점의 실제 FastAPI 응답에서는 점포 115곳·주민등록인구 10,964명·면적 2.568560㎢로 **점포당 95.34명(7.11백분위)**, **44.77곳/㎢(47.97백분위)**를 확인했다.
 
+### 2026년 2분기 원천 점검
+
+| 입력 | 2026-06-30 자료 확인 결과 |
+|---|---|
+| [행정안전부 주민등록인구](https://jumin.mois.go.kr/statMonth.do) | 6월 말 원본 확보. 서울 427동, 9,289,813명. 시·구·동 합계 일치 |
+| [국가데이터처 행정구역분류 연계표](https://kssc.mods.go.kr:8443/ksscNew_web/upload/%ED%95%9C%EA%B5%AD%ED%96%89%EC%A0%95%EA%B5%AC%EC%97%AD%EB%B6%84%EB%A5%98_2026.4.1.%EA%B8%B0%EC%A4%80_20260401014049.xlsx) | SGIS와 H10 공식 대응 427쌍. 7월 10일판과 서울 코드쌍이 동일하고 6월 인구의 H10 427개 모두 일치 |
+| [서울시 상권분석서비스 점포](https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do) | 2분기 양수 점포 집계 후보는 커피 전문점 425동, 분식전문점 425동, 제과점 421동 |
+| [SGIS 행정동 경계](https://sgis.mods.go.kr/view/pss/openDataIntrcn) | 공개 목록의 최신 행정동 경계 기준은 2025년 6월 말 |
+| [서울시 동별 면적 통계](https://data.seoul.go.kr/dataList/DT201004K060005/S/2/datasetView.do) | 매년 12월 기준 |
+| [행안부 구역의 도형](https://www.juso.go.kr/externalLink/goUrl?menuId=DT06) | 공식 목록에 2026년 6월 전체분이 있다. 본인인증과 제공 승인이 필요한 항목이며, 서울 파일의 기준일과 도형은 원본 수령 후 확인할 수 있다. [공식 신청 안내](https://eng.juso.go.kr/addrlink/qna/qnaDetail.do?bulletinRefSn=122642&noticeMgtSn=122642&noticeType=QNA) |
+
+인구 원본·공식 연계표·검증 결과·다운로드 목록 응답은 `data/raw/seoul/fit-reference/20260630/`에 보관했다. 서울의 2026년 6월 행정동 SHP(`TL_SCCO_GEMD`)를 받으면 기준일, 좌표계, 동별 코드와 도형 범위를 확인하고 2분기 점포 집계와 연결할 수 있다.
+
+서울 원본 API CSV와 가공 스냅샷의 2026Q2 전체점포·개업·폐업 35,301행이 일치했다. 전체 점포 수는 일반 점포와 프랜차이즈 점포를 포함한다. 점포 원본의 425개 지역 코드 집합은 2021Q1부터 2026Q2까지 같았다. 서울시 문서의 주민등록 행정기관 코드 형식으로 점포 코드의 6월 말 인구 대응 여부만 점검했다. 커피 전문점·분식전문점 각 422동과 제과점 418동이 남았다. 이 수는 경계 검증 전 후보 수다. 일원2동(`11680740`), 상일동(`11740520`), 용신동(`11230536`)의 옛 점포 코드는 자동 연결에서 제외한다. 공식 범위가 확인될 때까지 새 행정동으로 재배분을 보류한다. 코드 형식만 일치하는 추가 28동은 2025년 공간 대조 기준을 통과하지 못했으므로 새 경계에서 재검토한다. [서울시 코드 형식 안내](https://data.seoul.go.kr/dataVisual/seoul/seoulLivingPopulation.do)
+
+2026Q2 면적의 적용일을 확인하기 전까지는 이 분기의 참조표를 발행 보류한다. 2025Q2 참조표를 설정한 FastAPI에 실제 2026Q2 점포 관측을 넣어 두 지표가 `null`과 `fit_reference_period_mismatch`를 반환하는 것을 확인했다.
+
+### 경계 수령 후 면적 정규화
+
+제공 안내로 경계 기준일을 확인하고 ZIP을 보존한다. 파일명에 표시된 배포월, ZIP 수정 시각, DBF 수정일은 경계의 적용일과 구분한다. 서울 전체분의 `TL_SCCO_GEMD.shp`와 같은 이름의 DBF·SHX·PRJ가 필요하다. 공식 가이드의 `EMD_CD`는 행정기관 코드 10자리다. [행안부 구역의 도형](https://business.juso.go.kr/jst/jstAddressDownload?menu=24)
+
+면적 전처리는 FastAPI와 별도로 실행한다. 검증에 사용한 GIS 라이브러리는 pyshp 3.1.8, pyproj 3.8.0, Shapely 2.2.0이다. 경계 기준일 검증 자료에는 `reference_date`, `reference_date_verified`, `source_url`, `reference_date_basis`의 공식 `url`과 설명, 실제 `acquired_at`을 기재한다. `components`에는 `.shp`, `.dbf`, `.shx`, `.prj` 각각의 SHA-256을 적는다. `.cpg`가 있으면 이 파일의 지문도 함께 기록한다. `bridge`에는 공식 URL, 정규화한 연계표 SHA-256과 같은 기준일을 기록한다. 제공처의 자료로 적용일을 확인한 뒤 검증 여부를 기록한다.
+
+```bash
+PYTHONPATH=src:. .venv/bin/python scripts/normalize_seoul_gemd_areas.py   --shapefile data/raw/seoul/fit-reference/20260630/shape/TL_SCCO_GEMD.shp   --metadata data/raw/seoul/fit-reference/20260630/boundary-evidence.json   --bridge data/raw/seoul/fit-reference/20260630/crosswalk/kssc-sgis-h10-seoul-20260630.csv   --output data/processed/seoul/gemd-areas-20260630
+```
+
+이 단계는 `areas.csv`와 원본 지문·좌표계·기준일이 들어 있는 `manifest.json`, 제외 목록을 만든다. 매니페스트의 `area_source`를 참조표 생성용 `evidence.json`의 `sources.area`에 사용한다. 점포의 서울 8자리 원본 코드와 경계 범위를 대조한 뒤 대응이 확인된 행만 `mapping.csv`에 넣는다.
+
 ## FastAPI 응답
 
 기본 `POST /predict` v1.0의 `fit_indicators`에 두 값을 반환한다. 조회 조건은 공식 `seoul-adstrd` 원본 지역·업종 코드, 참조표와 동일한 `base_period`, 실제 참조표 확보일 또는 그 이후의 `as_of`다. 요청의 인구·점포 수·면적을 참조표의 원천값 대신 사용하지 않는다. 기존 진단 및 성장 결과는 별도로 계산한다.
