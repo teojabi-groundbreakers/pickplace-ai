@@ -37,6 +37,7 @@ AI 서비스는 **내부 계산 API**다. FE가 요청하는 `/analyses`의 전�
 
 - 성장 예측의 `estimated_yoy_growth=0.05`는 전년 동기 대비 예상 증가율 5%다.
 - `risk_indicators.sales_yoy_change`와 `risk_indicators.closure_burden`는 요청 이력에서 계산한 별도 관측 지표다. 화면이나 보고서에는 두 값을 각 기준 분기와 함께 표시한다. [분리 지표 계약](#매출-변화와-폐업-부담)
+- `fit_indicators`는 기준일과 지역 대응이 확인된 서울 자료에서 점포당 주민 수와 점포 밀집도의 원래 값과 업종 내 백분위를 제공한다. [참조표 생성과 응답 계약](SEOUL_FIT_REFERENCE.md)
 - `risk.score`는 높을수록 위험 신호가 크고, `fit.score`는 높을수록 정의된 지표상 적합도가 높다.
 - 초안 규칙 지수는 정책 버전과 초안 상태를 함께 해석한다. 검증된 폐업확률·창업 성공확률이 아니다.
 - 성장 예측의 `target_period`, `comparison_period`, 모델·정책 버전을 표시하거나 저장한다.
@@ -70,6 +71,7 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 
 ## 운영·통합
 
+- `PICKPLACE_SEOUL_FIT_REFERENCE_DIR`에 검증된 서울 비교표 디렉터리를 설정할 수 있다. 미설정 시 `fit_indicators`의 두 값과 백분위는 null이다.
 - `PICKPLACE_MODEL_DIR`: 배포할 모델 산출물 디렉터리
 - `PICKPLACE_API_KEY`: 내부 요청 키. 설정하면 `/predict`·`/model-info` 호출의 `X-API-Key` 헤더에 함께 전달한다.
 - `PICKPLACE_REQUIRE_API_KEY`: 운영 시 `true`. 비밀키가 비어 있으면 시작을 중단한다. 로컬 개발의 무키 실행과 구분한다.
@@ -78,7 +80,7 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 
 제공 Compose는 AI 컨테이너 준비용이며 운영 내부키를 요구한다. Spring Boot 컨테이너도 `pickplace-ai-internal` 네트워크에 연결한 후 `http://ai-api:8000`으로 호출한다. 다른 Compose에서 이미 만든 네트워크를 함께 사용한다면 `external: true` 등 실제 네트워크 연결 구성을 확인한다. AI 포트를 호스트나 외부 인터넷에 공개하지 않는다. Spring Boot는 AI 장애 시 통계 결과를 유지하고 AI 부분만 사용 불가로 표시한다.
 
-`/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다.
+`/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다. 서울 참조표 상태는 `fit_reference_ready`와 `fit_reference_reason`으로 확인한다.
 
 외부 SGIS 경계 조회, 프론트엔드 직접 연결 및 전국 데이터 수집 API는 이 서비스의 초기 구현 범위에 포함하지 않는다.
 
