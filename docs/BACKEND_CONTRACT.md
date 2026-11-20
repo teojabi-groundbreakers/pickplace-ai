@@ -36,6 +36,8 @@ AI 서비스는 **내부 계산 API**다. FE가 요청하는 `/analyses`의 전�
 ## 응답 해석
 
 - 성장 예측의 `estimated_yoy_growth=0.05`는 전년 동기 대비 예상 증가율 5%다.
+- `risk_indicators.sales_yoy_change`와 `risk_indicators.closure_burden`는 요청 이력에서 계산한 별도 관측 지표다. 화면이나 보고서에는 두 값을 각 기준 분기와 함께 표시한다. [분리 지표 계약](#매출-변화와-폐업-부담)
+- `fit_indicators`는 기준일과 지역 대응이 확인된 서울 자료에서 점포당 주민 수와 점포 밀집도의 원래 값과 업종 내 백분위를 제공한다. [참조표 생성과 응답 계약](SEOUL_FIT_REFERENCE.md)
 - `risk.score`는 높을수록 위험 신호가 크고, `fit.score`는 높을수록 정의된 지표상 적합도가 높다.
 - 초안 규칙 지수는 정책 버전과 초안 상태를 함께 해석한다. 검증된 폐업확률·창업 성공확률이 아니다.
 - 성장 예측의 `target_period`, `comparison_period`, 모델·정책 버전을 표시하거나 저장한다.
@@ -45,8 +47,31 @@ AI 서비스는 **내부 계산 API**다. FE가 요청하는 `/analyses`의 전�
 
 FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수로 기대하는 부분이 있다. AI의 부분 가용성·`null` 결과를 연동하려면 BE·FE 계약을 조정해야 한다. 검증하지 않은 신뢰도 숫자나 종합점수를 만들어 기존 타입을 채우지 않는다. 이번 AI 준비 작업은 기존 FE 소스·계약을 수정하지 않는다.
 
+### 매출 변화와 폐업 부담
+
+기본 `POST /predict` v1.0은 기존 `risk` 객체 옆에 `risk_indicators`를 반환한다. 두 관측 지표는 종합지수나 성장 모델 준비 상태와 독립적으로 계산한다.
+
+| 응답 필드 | 계산과 표시 | 필요한 관측 |
+|---|---|---|
+| `risk_indicators.sales_yoy_change` | 기준 분기 매출 ÷ 전년 동기 매출 − 1. 예를 들어 `-0.20`은 전년 동기 대비 20% 감소 | 기준 분기와 정확히 네 분기 전의 같은 지역·업종 매출 |
+| `risk_indicators.closure_burden` | 기준 분기 폐업 수 ÷ 그 분기의 전체 점포 수. `0.05`는 관측한 전체 점포 대비 폐업 비중 5% | 같은 기준 분기의 폐업 수와 전체 점포 수 |
+
+각 지표에서 `status`, `value`, `unit=ratio`, `reason`, `base_period`를 읽는다. 매출에는 `comparison_period`, `current_sales_amount`, `comparison_sales_amount`가 포함되고, 폐업 부담에는 `closing_count`와 `store_count`가 포함된다. 관측값이 부족하거나 분모가 유효하지 않으면 해당 지표의 `value`가 `null`이고 `reason`으로 이유를 전달한다. 기준 분기 매출이나 폐업 수가 0인 경우는 유효한 관측이다.
+
+| 사유 | `reason` |
+|---|---|
+| 기준·비교 매출 누락 | `missing_current_sales`, `missing_comparison_sales` |
+| 비교 매출 0 이하 | `nonpositive_comparison_sales` |
+| 전체 점포 수 또는 폐업 수 누락 | `missing_store_count`, `missing_closing_count` |
+| 전체 점포 수 0 이하 | `nonpositive_store_count` |
+| 폐업 수가 전체 점포 수를 초과 | `closing_count_exceeds_store_count` |
+| 비율을 유한한 값으로 계산할 수 없음 | `nonfinite_derived_indicator` |
+
+표시 문구는 매출 **변화**와 폐업 **부담**을 구분한다. 폐업 부담은 해당 분기 관측 비중이다. 개별 점포의 미래 폐업 여부나 확률을 표시하려면 별도 검증이 필요하다. 지표별 표시를 사용하는 쪽은 두 필드의 가용성을 개별 확인한다.
+
 ## 운영·통합
 
+- `PICKPLACE_SEOUL_FIT_REFERENCE_DIR`에 검증된 서울 비교표 디렉터리 또는 `YYYYQn`별 비교표를 담은 상위 디렉터리를 설정할 수 있다. 미설정 시 `fit_indicators`의 두 값과 백분위는 null이다.
 - `PICKPLACE_MODEL_DIR`: 배포할 모델 산출물 디렉터리
 - `PICKPLACE_API_KEY`: 내부 요청 키. 설정하면 `/predict`·`/model-info` 호출의 `X-API-Key` 헤더에 함께 전달한다.
 - `PICKPLACE_REQUIRE_API_KEY`: 운영 시 `true`. 비밀키가 비어 있으면 시작을 중단한다. 로컬 개발의 무키 실행과 구분한다.
@@ -55,7 +80,7 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 
 제공 Compose는 AI 컨테이너 준비용이며 운영 내부키를 요구한다. Spring Boot 컨테이너도 `pickplace-ai-internal` 네트워크에 연결한 후 `http://ai-api:8000`으로 호출한다. 다른 Compose에서 이미 만든 네트워크를 함께 사용한다면 `external: true` 등 실제 네트워크 연결 구성을 확인한다. AI 포트를 호스트나 외부 인터넷에 공개하지 않는다. Spring Boot는 AI 장애 시 통계 결과를 유지하고 AI 부분만 사용 불가로 표시한다.
 
-`/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다.
+`/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다. 서울 참조표 상태와 로드한 분기는 `fit_reference_ready`, `fit_reference_reason`, `fit_reference_periods`로 확인한다.
 
 외부 SGIS 경계 조회, 프론트엔드 직접 연결 및 전국 데이터 수집 API는 이 서비스의 초기 구현 범위에 포함하지 않는다.
 
