@@ -2,6 +2,7 @@
 
 | 문서 | 내용 |
 |---|---|
+| [GYEONGGI_FIT_REFERENCE.md](GYEONGGI_FIT_REFERENCE.md) | 경기 2026Q2 경계·인구·영업 업소 검증과 업종별 비교표 조회 |
 | [SEOUL_FIT_REFERENCE.md](SEOUL_FIT_REFERENCE.md) | 기준일 일치 서울 면적·인구와 업종별 두 관측 지표의 FastAPI 계약 |
 | [SEOUL_FIT_CRITERIA.md](SEOUL_FIT_CRITERIA.md) | 서울 면적·상주인구 기준 시점과 3개 업종의 적합도 기준 비교 |
 | [SEOUL_SCORE_AUDIT.md](SEOUL_SCORE_AUDIT.md) | 서울 위험도·적합도 초안의 업종별 분포, 후속 관측 대조와 민감도 |
