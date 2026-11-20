@@ -42,7 +42,27 @@ SGIS ZIP에 함께 들어 있는 인구 통계의 기준연도는 2024년이다.
 
 서울 원본 API CSV와 가공 스냅샷의 2026Q2 전체점포·개업·폐업 35,301행이 일치했다. 전체 점포 수는 일반 점포와 프랜차이즈 점포를 포함한다. 점포 원본의 425개 지역 코드 집합은 2021Q1부터 2026Q2까지 같았다. 서울시 문서의 주민등록 행정기관 코드 형식으로 점포 코드의 6월 말 인구 대응 여부만 점검했다. 커피 전문점·분식전문점 각 422동과 제과점 418동이 남았다. 이 수는 경계 검증 전 후보 수다. 일원2동(`11680740`), 상일동(`11740520`), 용신동(`11230536`)의 옛 점포 코드는 자동 연결에서 제외한다. 공식 범위가 확인될 때까지 새 행정동으로 재배분을 보류한다. 코드 형식만 일치하는 추가 28동은 2025년 공간 대조 기준을 통과하지 못했으므로 새 경계에서 재검토한다. [서울시 코드 형식 안내](https://data.seoul.go.kr/dataVisual/seoul/seoulLivingPopulation.do)
 
-2026Q2 면적의 적용일을 확인하기 전까지는 이 분기의 참조표를 발행 보류한다. 2025Q2 참조표를 설정한 FastAPI에 실제 2026Q2 점포 관측을 넣어 두 지표가 `null`과 `fit_reference_period_mismatch`를 반환하는 것을 확인했다.
+2026Q2 입력의 기준일·좌표계 확인과 참조표 발행 결과는 아래에 기록했다.
+
+### 2026-11-20 경계 확인과 2026Q2 참조표
+
+- 사용자가 확인한 신청월은 2026년 6월이다. 제공처는 `TL_SCCO_GEMD` 등 행정구역 경계를 매월 말일 기준으로 작성한다고 설명하므로, 이 서울 전체분의 기준일을 **2026-06-30**으로 기록했다. [경계 기준일 공식 답변](https://business.juso.go.kr/jsi/jsiInquiryDetails?qaPstUnqMgno=134797&qaPstRfrncMgno=134797)
+- 제공처는 **GRS80 UTM-K, EPSG:5179**를 사용한다고 안내한다. 원본 ZIP의 파일 시각과 형상을 보존했고, 정규화용 PRJ는 제공처의 좌표계 정의로 생성했다. [구역의 도형 좌표계 공식 답변](https://business.juso.go.kr/jsi/jsiInquiryDetails?qaPstUnqMgno=125841&qaPstRfrncMgno=125841)
+- ZIP 내부 파일 시각은 7월 1일이다. 제공처는 6월 구역의 도형 전체분을 7월 7일 이후 제공한다고 안내했다. 별도 도로명주소 전자지도 답변에서는 6월 자료에 7월 개편이 반영됐음을 확인했다. 서울의 신청월·기준일, 원본 파일 시각, 다른 지역의 개편 시행일을 따로 기록했다. [6월 구역의 도형 제공 안내](https://business.juso.go.kr/jsi/jsiInquiryDetails?qaPstUnqMgno=145808&qaPstRfrncMgno=145808) · [6월 전자지도 개편 반영 답변](https://business.juso.go.kr/jsi/jsiInquiryDetails?qaPstUnqMgno=145931&qaPstRfrncMgno=145931)
+
+서울 `11000/TL_SCCO_GEMD`의 H10 427개는 6월 말 주민등록 및 공식 연계표와 모두 일치했다. 자기교차 등 무효 도형 6개는 제외하고 421개 동의 면적을 ㎡로 정규화했다. 원본은 `data/raw/seoul/fit-reference/received-20261120/`에 보관했다.
+
+2026Q2는 서울시 점포 자료의 원본 코드, 공식 H10, 상호 유일한 최대 교집합을 모두 확인하고, 교집합이 양쪽 면적의 **각각 99.0% 이상**인 동을 사용했다. 2025Q2와 같은 99.9%를 적용하면 1동, 99.5%는 39동, 99.0%는 121동이다. 이번 99.0% 조건에서 선택된 동의 면적 차이는 기존 서울 도형 대비 최대 0.88%였다. 제공처는 이 경계가 지형 기반으로 구축됐다고 설명한다. [구역의 도형 제작 기준](https://business.juso.go.kr/jsi/jsiInquiryDetails?qaPstUnqMgno=141805&qaPstRfrncMgno=141805)
+
+| 업종 | 비교 동 |
+|---|---:|
+| 커피 전문점 | 121 |
+| 분식전문점 | 121 |
+| 제과점 | 121 |
+
+서울 원본 425동 중 양방향 겹침 미달 295동, 도형 무효 6동, 현행 H10이 없는 옛 코드 3동을 제외했다. 25개 자치구의 121동을 연결해 2026Q2 점포 1,271개 지역·업종 조합 중 363개를 참조표에 넣었다. 2026Q2 백분위의 비교 집단은 이 121동이며, 자치구별 표본 수는 다르다. 참조표의 정보 가용일은 원본을 확보한 2026-11-20이다.
+
+청운효자동 커피 전문점의 점포 124곳, 주민등록인구 10,682명, 면적 2.581889㎢에서 **점포당 86.15명(5.00백분위)**, **48.03곳/㎢(46.67백분위)**를 확인했다. 결과표는 `data/processed/seoul/fit-references/2026Q2/`에 있다.
 
 ### 경계 수령 후 면적 정규화
 
@@ -86,12 +106,12 @@ fit-references/
   2025Q2/
     manifest.json
     reference.csv
-  2026Q2/          # 원천 검증 후 생성
+  2026Q2/
     manifest.json
     reference.csv
 ```
 
-FastAPI는 요청의 `base_period`와 정확히 일치하는 표로 두 값과 백분위를 계산한다. 해당 분기가 없으면 `fit_reference_period_mismatch`, 해당 분기의 파일이나 지문 검증에 실패하면 `fit_reference_invalid`를 반환한다. `GET /health`의 `fit_reference_periods`는 시작 시 로드한 분기 목록이다. 일부 분기의 로딩이 실패해도 정상 분기는 조회할 수 있다. 이 작업 환경에서는 `data/processed/seoul/fit-references/`에 기존 2025Q2 표를 연결했다.
+FastAPI는 요청의 `base_period`와 정확히 일치하는 표로 두 값과 백분위를 계산한다. 해당 분기가 없으면 `fit_reference_period_mismatch`, 해당 분기의 파일이나 지문 검증에 실패하면 `fit_reference_invalid`를 반환한다. `GET /health`의 `fit_reference_periods`는 시작 시 로드한 분기 목록이다. 일부 분기의 로딩이 실패해도 정상 분기는 조회할 수 있다. 이 작업 환경에서는 `data/processed/seoul/fit-references/`에서 2025Q2와 2026Q2를 함께 조회할 수 있다.
 
 ## 참조표 만들기
 
@@ -110,4 +130,19 @@ PICKPLACE_SEOUL_FIT_REFERENCE_DIR=data/processed/seoul/fit-reference-2025Q2 \
   PYTHONPATH=src .venv/bin/uvicorn pickplace_ai.api:app
 ```
 
-생성된 `manifest.json`에 원천 지문, 기준일, 확보일, 업종별 비교 동 수, 누락 사유별 제외 건수를 보관한다. API는 시작할 때 `reference.csv`와 지문을 검증한다. 공식 원본과 생성한 표는 로컬 `data/`에 둔다. 이번 원본, 코드·공간 대조 감사표와 재현 스크립트는 `data/raw/seoul/fit-reference/20250630/`에 있다. 참고 기간은 2025Q2이며, 자료가 맞는 후속 분기에 같은 절차를 다시 적용한다.
+2026Q2를 새 경로에서 재현하는 명령은 다음과 같다. 공간 대조의 재현 스크립트와 제외 목록은 `data/raw/seoul/fit-reference/20260630/mapping-audit/`에 있다.
+
+```bash
+PYTHONPATH=src:. .venv/bin/python scripts/build_seoul_fit_reference.py \
+  --snapshot data/processed/seoul/indicators-20261109 \
+  --areas data/processed/seoul/gemd-areas-20260630/areas.csv \
+  --population data/raw/seoul/fit-reference/20260630/mois-population/mois-resident-households-202606-national-eupmyeondong.csv \
+  --mapping data/raw/seoul/fit-reference/20260630/mapping.csv \
+  --evidence data/raw/seoul/fit-reference/20260630/reference-evidence.json \
+  --output data/processed/seoul/repro-fit-2026Q2
+
+PICKPLACE_SEOUL_FIT_REFERENCE_DIR=data/processed/seoul/fit-references \
+  PYTHONPATH=src .venv/bin/uvicorn pickplace_ai.api:app
+```
+
+생성된 `manifest.json`에 원천 지문, 기준일, 확보일, 업종별 비교 동 수, 누락 사유별 제외 건수를 보관한다. API는 시작할 때 `reference.csv`와 지문을 검증한다. 공식 원본과 생성한 표는 로컬 `data/`에 둔다. 원본 확인과 대조 기록은 `data/raw/seoul/fit-reference/20250630/`과 `data/raw/seoul/fit-reference/20260630/`에 보관했다. 현재 참조표는 2025Q2와 2026Q2를 제공하며, 백분위 비교는 요청한 분기의 해당 업종 집단에서 계산한다.
