@@ -21,6 +21,10 @@ from pickplace_ai import __version__
 from pickplace_ai.artifacts import ModelBundle, load_bundle
 from pickplace_ai.features import FeatureUnavailable, feature_record
 from pickplace_ai.fit_reference import (
+    GYEONGGI_CODE_SYSTEM,
+    GYEONGGI_KIND,
+    KIND,
+    FitReference,
     load_fit_references,
     supports_fit_scope,
     unavailable_fit,
@@ -50,10 +54,12 @@ class Settings:
     allow_synthetic: bool = False
     allow_experimental: bool = False
     fit_reference_dir: Path | None = None
+    gyeonggi_fit_reference_dir: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
         fit_reference_dir = os.environ.get("PICKPLACE_SEOUL_FIT_REFERENCE_DIR")
+        gyeonggi_reference_dir = os.environ.get("PICKPLACE_GYEONGGI_FIT_REFERENCE_DIR")
         return cls(
             model_dir=Path(os.environ.get("PICKPLACE_MODEL_DIR", "artifacts/current")),
             api_key=os.environ.get("PICKPLACE_API_KEY") or None,
@@ -61,7 +67,40 @@ class Settings:
             allow_synthetic=_environment_flag("PICKPLACE_ALLOW_SYNTHETIC"),
             allow_experimental=_environment_flag("PICKPLACE_ALLOW_EXPERIMENTAL"),
             fit_reference_dir=Path(fit_reference_dir) if fit_reference_dir else None,
+            gyeonggi_fit_reference_dir=Path(gyeonggi_reference_dir)
+            if gyeonggi_reference_dir
+            else None,
         )
+
+
+@dataclass(frozen=True)
+class _FitCatalog:
+    kind: str
+    references: dict[str, FitReference]
+    invalid_periods: set[str]
+    reason: str | None
+
+    @classmethod
+    def load(cls, path: Path | None, kind: str) -> _FitCatalog:
+        if path is None:
+            return cls(kind, {}, set(), "fit_reference_not_configured")
+        references, invalid_periods = load_fit_references(path, kind)
+        reason = None if references else "fit_reference_invalid"
+        return cls(kind, references, invalid_periods, reason)
+
+    def indicators(self, payload: PredictionRequest) -> dict:
+        reference = self.references.get(payload.base_period)
+        if reference is not None:
+            return reference.indicators(payload)
+        reason = self.reason
+        if reason is None:
+            if not supports_fit_scope(payload, self.kind):
+                reason = "unsupported_fit_reference_scope"
+            elif payload.base_period in self.invalid_periods:
+                reason = "fit_reference_invalid"
+            else:
+                reason = "fit_reference_period_mismatch"
+        return unavailable_fit(payload.base_period, reason)
 
 
 def _model_block_reason(metadata: dict[str, Any], settings: Settings) -> str | None:
@@ -139,16 +178,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.bundle = None
         application.state.model_reason = "model_not_found"
-        application.state.fit_references = {}
-        application.state.invalid_fit_periods = set()
-        application.state.fit_reference_reason = "fit_reference_not_configured"
-        if config.fit_reference_dir is not None:
-            application.state.fit_reference_reason = "fit_reference_invalid"
-            references, invalid_periods = load_fit_references(config.fit_reference_dir)
-            application.state.fit_references = references
-            application.state.invalid_fit_periods = invalid_periods
-            if references:
-                application.state.fit_reference_reason = None
+        application.state.fit_catalogs = {
+            KIND: _FitCatalog.load(config.fit_reference_dir, KIND),
+            GYEONGGI_KIND: _FitCatalog.load(config.gyeonggi_fit_reference_dir, GYEONGGI_KIND),
+        }
         if config.model_dir.is_dir():
             try:
                 bundle = load_bundle(config.model_dir)
@@ -160,8 +193,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.model_reason = "model_load_failed"
         yield
         application.state.bundle = None
-        application.state.fit_references.clear()
-        application.state.invalid_fit_periods.clear()
+        application.state.fit_catalogs.clear()
 
     application = FastAPI(
         title="PickPlace Internal AI API",
@@ -198,15 +230,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.get("/health")
     def health(request: Request) -> dict[str, Any]:
         reason = request.app.state.model_reason
+        seoul = request.app.state.fit_catalogs[KIND]
+        gyeonggi = request.app.state.fit_catalogs[GYEONGGI_KIND]
         return {
             "status": "ok",
             "version": __version__,
             "basic_diagnosis_ready": True,
             "growth_model_ready": reason is None,
             "growth_model_reason": reason,
-            "fit_reference_ready": bool(request.app.state.fit_references),
-            "fit_reference_reason": request.app.state.fit_reference_reason,
-            "fit_reference_periods": sorted(request.app.state.fit_references),
+            "fit_reference_ready": bool(seoul.references),
+            "fit_reference_reason": seoul.reason,
+            "fit_reference_periods": sorted(seoul.references),
+            "gyeonggi_fit_reference_ready": bool(gyeonggi.references),
+            "gyeonggi_fit_reference_reason": gyeonggi.reason,
+            "gyeonggi_fit_reference_periods": sorted(gyeonggi.references),
             "authentication_enabled": config.api_key is not None,
         }
 
@@ -291,19 +328,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 except Exception:
                     logger.exception("Model inference failed")
                     growth["reason"] = "model_inference_failed"
-        fit_reference = request.app.state.fit_references.get(payload.base_period)
-        if fit_reference is not None:
-            fit_indicators = fit_reference.indicators(payload)
-        else:
-            reason = request.app.state.fit_reference_reason
-            if reason is None:
-                if not supports_fit_scope(payload):
-                    reason = "unsupported_fit_reference_scope"
-                elif payload.base_period in request.app.state.invalid_fit_periods:
-                    reason = "fit_reference_invalid"
-                else:
-                    reason = "fit_reference_period_mismatch"
-            fit_indicators = unavailable_fit(payload.base_period, reason)
+        kind = GYEONGGI_KIND if payload.region_code_system == GYEONGGI_CODE_SYSTEM else KIND
+        fit_indicators = request.app.state.fit_catalogs[kind].indicators(payload)
         return {
             "schema_version": "1.0",
             "region_code": payload.region_code,

@@ -74,6 +74,115 @@ def payload(region="11110511", industry="CS100010", period="2025Q2", as_of="2026
     }
 
 
+def gyeonggi_fixture(root, **updates):
+    effective = "2026-06-30"
+    fields = {
+        "kind": fit_reference.GYEONGGI_KIND,
+        "region_code_system": fit_reference.GYEONGGI_CODE_SYSTEM,
+        "base_period": "2026Q2",
+        "stores_period": "2026Q2",
+        "reference_date": effective,
+        "area_reference_date": effective,
+        "population_reference_date": effective,
+        "mapping_reference_date": effective,
+        "stores_reference_date": effective,
+        "store_count_definition": fit_reference.GYEONGGI_STORE_DEFINITION,
+    }
+    fields.update(updates)
+    return write_reference(
+        root,
+        rows=[("4111111100", "I21201", 20, 1000, 500_000), ("4111111200", "I21201", 5, 3000, 1e6)],
+        **fields,
+    )
+
+
+def gyeonggi_payload(region="4111111100", industry="I21201", period="2026Q2"):
+    request = payload(region=region, industry=industry, period=period)
+    request["region_code_system"] = fit_reference.GYEONGGI_CODE_SYSTEM
+    request["history"][0]["region_code_system"] = fit_reference.GYEONGGI_CODE_SYSTEM
+    return request
+
+
+def test_seoul_and_gyeonggi_use_independent_same_quarter_catalogs(tmp_path):
+    seoul = write_reference(
+        tmp_path / "seoul",
+        base_period="2026Q2",
+        stores_period="2026Q2",
+        reference_date="2026-06-30",
+        area_reference_date="2026-06-30",
+        population_reference_date="2026-06-30",
+        mapping_reference_date="2026-06-30",
+    )
+    settings = api.Settings(
+        model_dir=tmp_path / "absent-model",
+        fit_reference_dir=seoul,
+        gyeonggi_fit_reference_dir=gyeonggi_fixture(tmp_path / "gyeonggi"),
+    )
+    with TestClient(api.create_app(settings)) as client:
+        health = client.get("/health").json()
+        assert (
+            health["fit_reference_periods"]
+            == health["gyeonggi_fit_reference_periods"]
+            == ["2026Q2"]
+        )
+        seoul_fit = client.post("/predict", json=payload(period="2026Q2")).json()["fit_indicators"]
+        response = client.post("/predict", json=gyeonggi_payload())
+        assert response.status_code == 200
+        gyeonggi_fit = response.json()["fit_indicators"]
+        assert seoul_fit["reference_kind"] == fit_reference.KIND
+        assert seoul_fit["store_count"] == 10
+        assert gyeonggi_fit["reference_kind"] == fit_reference.GYEONGGI_KIND
+        assert gyeonggi_fit["store_count_definition"] == fit_reference.GYEONGGI_STORE_DEFINITION
+        assert gyeonggi_fit["store_count"] == 20
+        assert gyeonggi_fit["residents_per_store"]["value"] == 50
+        assert gyeonggi_fit["stores_per_km2"]["value"] == 40
+        assert gyeonggi_fit["residents_per_store"]["percentile"] == 0
+        assert gyeonggi_fit["stores_per_km2"]["percentile"] == 100
+
+
+@pytest.mark.parametrize(
+    ("request_scope", "reason"),
+    [
+        ({"region": "4111111300"}, "fit_scope_not_in_reference"),
+        ({"region": "2611111100"}, "unsupported_fit_reference_scope"),
+        ({"industry": "CS100010"}, "unsupported_fit_reference_scope"),
+        ({"period": "2025Q2"}, "fit_reference_period_mismatch"),
+    ],
+)
+def test_gyeonggi_fit_has_no_scope_or_period_fallback(tmp_path, request_scope, reason):
+    settings = api.Settings(
+        model_dir=tmp_path / "absent-model",
+        gyeonggi_fit_reference_dir=gyeonggi_fixture(tmp_path / "gyeonggi"),
+    )
+    with TestClient(api.create_app(settings)) as client:
+        response = client.post("/predict", json=gyeonggi_payload(**request_scope))
+        assert response.status_code == 200
+        for name in fit_reference.UNITS:
+            assert response.json()["fit_indicators"][name]["value"] is None
+            assert response.json()["fit_indicators"][name]["reason"] == reason
+
+
+def test_gyeonggi_fit_is_hidden_until_the_reference_is_available(tmp_path):
+    settings = api.Settings(
+        model_dir=tmp_path / "absent-model",
+        gyeonggi_fit_reference_dir=gyeonggi_fixture(tmp_path / "gyeonggi"),
+    )
+    request = gyeonggi_payload()
+    request["as_of"] = "2026-11-19"
+    with TestClient(api.create_app(settings)) as client:
+        result = client.post("/predict", json=request).json()["fit_indicators"]
+    assert result["stores_per_km2"]["value"] is None
+    assert result["stores_per_km2"]["reason"] == "fit_reference_after_as_of"
+
+
+def test_gyeonggi_catalog_checks_snapshot_day_and_kind(tmp_path, monkeypatch):
+    root = gyeonggi_fixture(tmp_path / "gyeonggi", stores_reference_date="2026-07-01")
+    monkeypatch.setenv("PICKPLACE_GYEONGGI_FIT_REFERENCE_DIR", str(root))
+    assert api.Settings.from_env().gyeonggi_fit_reference_dir == root
+    assert fit_reference.load_fit_references(root, fit_reference.GYEONGGI_KIND) == ({}, set())
+    assert fit_reference.load_fit_references(root) == ({}, set())
+
+
 def test_indicators_use_reference_values_and_per_industry_tied_ranks(tmp_path):
     model = fit_reference.FitReference(write_reference(tmp_path / "reference"))
     result = model.indicators(PredictionRequest.model_validate(payload()))

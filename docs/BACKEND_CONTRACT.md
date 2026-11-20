@@ -82,6 +82,8 @@ FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수�
 
 `/health`는 기본진단 가능 상태(`basic_diagnosis_ready`)와 성장 모델 준비 상태(`growth_model_ready`)를 구분한다. 모델이 없더라도 기본진단 서비스가 실행 중이면 HTTP 200일 수 있으므로 성장 모델의 준비 여부를 상태 필드로 확인한다. 서울 참조표 상태와 로드한 분기는 `fit_reference_ready`, `fit_reference_reason`, `fit_reference_periods`로 확인한다.
 
+경기 2026Q2의 `fit_indicators`를 조회할 때는 행안부 H10 코드 체계 `mois-resident-admin-10`과 소진공 업종 소분류를 사용한다. 경기 응답의 `store_count_definition`은 `sbiz_listed_active_businesses`이며 경기의 수록 영업 업소를 분모·분자로 사용한다. 경기 참조표의 상태는 `/health`의 `gyeonggi_fit_reference_ready`, `gyeonggi_fit_reference_reason`, `gyeonggi_fit_reference_periods`로 확인한다. [경기 원천과 적용 범위](GYEONGGI_FIT_REFERENCE.md)
+
 외부 SGIS 경계 조회, 프론트엔드 직접 연결 및 전국 데이터 수집 API는 이 서비스의 초기 구현 범위에 포함하지 않는다.
 
 ## 후향 실험 모델 연동 테스트

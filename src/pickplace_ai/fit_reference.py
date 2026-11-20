@@ -1,4 +1,4 @@
-"""기준일이 맞는 서울 자료에서 업종 내 상대 위치를 계산한다."""
+"""기준일이 맞는 지역 자료에서 같은 업종 내 상대 위치를 계산한다."""
 
 import csv
 import hashlib
@@ -11,11 +11,19 @@ from datetime import date
 from io import StringIO
 from pathlib import Path
 
+from pickplace_ai.nationwide_ingest import POPULATION_REGION_SYSTEM
 from pickplace_ai.periods import quarter_end
 from pickplace_ai.schemas import PredictionRequest
 
 KIND = "seoul_date_aligned_fit_reference_v1"
 CODE_SYSTEM = "seoul-adstrd"
+GYEONGGI_KIND = "gyeonggi_date_aligned_fit_reference_v1"
+GYEONGGI_CODE_SYSTEM = POPULATION_REGION_SYSTEM
+GYEONGGI_STORE_DEFINITION = "sbiz_listed_active_businesses"
+_REFERENCE_SCHEMES = {
+    KIND: (CODE_SYSTEM, re.compile(r"11[0-9]{6}"), re.compile(r"CS[0-9]{6}")),
+    GYEONGGI_KIND: (GYEONGGI_CODE_SYSTEM, re.compile(r"41[0-9]{8}"), re.compile(r"[A-Z][0-9]{5}")),
+}
 ROW_FIELDS = ("region_code", "industry_code", "store_count", "resident_population", "area_m2")
 UNITS = {"residents_per_store": "persons_per_store", "stores_per_km2": "stores_per_km2"}
 
@@ -24,11 +32,11 @@ _ARTIFACT_ERRORS = (OSError, ValueError, ArithmeticError, KeyError, TypeError, A
 _PERIOD_DIRECTORY = re.compile(r"[0-9]{4}Q[1-4]$")
 
 
-def validate_metadata(manifest: dict) -> None:
+def validate_metadata(manifest: dict, kind: str = KIND) -> None:
     if (
         not isinstance(manifest, dict)
-        or manifest.get("kind") != KIND
-        or manifest.get("region_code_system") != CODE_SYSTEM
+        or manifest.get("kind") != kind
+        or manifest.get("region_code_system") != _REFERENCE_SCHEMES[kind][0]
     ):
         raise ValueError("Unexpected fit reference kind or region code system")
     if manifest.get("source_kind") != "official":
@@ -42,6 +50,11 @@ def validate_metadata(manifest: dict) -> None:
             raise ValueError("Area, population and region-code mapping must use the same date")
     if manifest["stores_period"] != manifest["base_period"]:
         raise ValueError("Stores quarter must match the reference quarter")
+    if kind == GYEONGGI_KIND and (
+        date.fromisoformat(manifest["stores_reference_date"]) != effective
+        or manifest["store_count_definition"] != GYEONGGI_STORE_DEFINITION
+    ):
+        raise ValueError("Unexpected Gyeonggi store reference date or definition")
     if type(manifest["row_count"]) is not int or manifest["row_count"] < 1:
         raise ValueError("Expected a positive reference row count")
     for key in ("area", "population", "mapping", "stores"):
@@ -52,8 +65,16 @@ def validate_metadata(manifest: dict) -> None:
             raise ValueError("Missing official reference source or SHA-256")
 
 
-def supports_fit_scope(request: PredictionRequest) -> bool:
-    return request.source_kind == "official" and request.region_code_system == CODE_SYSTEM
+def supports_fit_scope(request: PredictionRequest, kind: str = KIND) -> bool:
+    system, region_pattern, industry_pattern = _REFERENCE_SCHEMES[kind]
+    if request.source_kind != "official" or request.region_code_system != system:
+        return False
+    if kind == GYEONGGI_KIND:
+        return bool(
+            region_pattern.fullmatch(request.region_code)
+            and industry_pattern.fullmatch(request.industry_code)
+        )
+    return True
 
 
 def rank_percentile(value: float, sorted_values: list[float]) -> float | None:
@@ -67,9 +88,11 @@ def rank_percentile(value: float, sorted_values: list[float]) -> float | None:
 class FitReference:
     """지문이 맞는 참조표를 시작 시 한 번 읽고 요청마다 같은 업종의 관측값을 찾는다."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, kind: str = KIND):
         manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
-        validate_metadata(manifest)
+        validate_metadata(manifest, kind)
+        self.kind = kind
+        _, region_pattern, industry_pattern = _REFERENCE_SCHEMES[kind]
         self.manifest = manifest
         self.available_at = date.fromisoformat(manifest["available_at"])
         content = (root / "reference.csv").read_bytes()
@@ -87,8 +110,8 @@ class FitReference:
             stores, population = int(row["store_count"]), int(row["resident_population"])
             area = float(row["area_m2"])
             if (
-                not re.fullmatch(r"11[0-9]{6}", region)
-                or not re.fullmatch(r"CS[0-9]{6}", industry)
+                not region_pattern.fullmatch(region)
+                or not industry_pattern.fullmatch(industry)
                 or stores <= 0
                 or population < 0
                 or not math.isfinite(area)
@@ -110,7 +133,7 @@ class FitReference:
             density.sort()
 
     def indicators(self, request: PredictionRequest) -> dict:
-        if not supports_fit_scope(request):
+        if not supports_fit_scope(request, self.kind):
             return unavailable_fit(request.base_period, "unsupported_fit_reference_scope")
         if request.base_period != self.manifest["base_period"]:
             return unavailable_fit(request.base_period, "fit_reference_period_mismatch")
@@ -125,12 +148,14 @@ class FitReference:
             "base_period": request.base_period,
             "reference_date": self.manifest["reference_date"],
             "reference_available_at": self.manifest["available_at"],
-            "reference_kind": KIND,
+            "reference_kind": self.kind,
             "cohort_size": len(populations[0]),
             "store_count": stores,
             "resident_population": population,
             "area_km2": area,
         }
+        if self.kind == GYEONGGI_KIND:
+            result["store_count_definition"] = self.manifest["store_count_definition"]
         for (name, unit), value, distribution in zip(
             UNITS.items(), values, populations, strict=True
         ):
@@ -146,15 +171,15 @@ class FitReference:
         return result
 
 
-def load_fit_references(root: Path) -> tuple[dict[str, FitReference], set[str]]:
+def load_fit_references(root: Path, kind: str = KIND) -> tuple[dict[str, FitReference], set[str]]:
     """단일 참조표 또는 분기별 디렉터리에서 확인된 참조표를 로드한다."""
     try:
         if (root / "manifest.json").exists() or (root / "reference.csv").exists():
-            reference = FitReference(root)
+            reference = FitReference(root, kind)
             return {reference.manifest["base_period"]: reference}, set()
         candidates = list(root.iterdir())
     except _ARTIFACT_ERRORS:
-        logger.warning("Seoul fit reference is unavailable or invalid")
+        logger.warning("Fit reference %s is unavailable or invalid", kind)
         return {}, set()
 
     references, invalid = {}, set()
@@ -163,12 +188,12 @@ def load_fit_references(root: Path) -> tuple[dict[str, FitReference], set[str]]:
         if not _PERIOD_DIRECTORY.fullmatch(period):
             continue
         try:
-            reference = FitReference(path)
+            reference = FitReference(path, kind)
             if reference.manifest["base_period"] != period:
                 raise ValueError("Fit reference quarter does not match its directory")
         except _ARTIFACT_ERRORS:
             invalid.add(period)
-            logger.warning("Seoul fit reference is unavailable or invalid for %s", period)
+            logger.warning("Fit reference %s is unavailable or invalid for %s", kind, period)
         else:
             references[period] = reference
     return references, invalid
