@@ -154,7 +154,8 @@ def test_runner_rejects_input_changed_during_evaluation(observations, tmp_path, 
     evaluate = rolling.evaluate
 
     def evaluate_then_change_input(*args, **kwargs):
-        result = evaluate(*args, **kwargs, candidate_factory=simple_candidates)
+        kwargs["candidate_factory"] = simple_candidates
+        result = evaluate(*args, **kwargs)
         source.write_bytes(before + b"\n")
         return result
 
@@ -177,3 +178,19 @@ def test_hist_candidate_trains_on_common_transformed_features(frame):
     estimates = near.predict(model, test)
     assert len(estimates) == len(test)
     assert np.isfinite(estimates).all()
+
+
+def test_huber_target_comparison_uses_raw_growth_and_retains_extremes(frame, monkeypatch):
+    monkeypatch.setattr(near, "candidates", lambda: {"huber_sgd": DummyRegressor(strategy="mean")})
+    train, test, _, _ = rolling.split_fold(frame, "2025Q1", 1)
+    training_targets = np.resize(np.array([-1.0, 0.0, 100.0]), len(train))
+    models = rolling.huber_target_candidates()
+    predictions = {}
+    for name, model in models.items():
+        model.fit(near.matrix(train), training_targets)
+        predictions[name] = near.predict(model, test)
+        assert len(predictions[name]) == len(test)
+
+    assert predictions["huber_sgd"] == pytest.approx(training_targets.mean())
+    expected = np.sinh(np.arcsinh(training_targets).mean())
+    assert predictions["huber_asinh"] == pytest.approx(expected)

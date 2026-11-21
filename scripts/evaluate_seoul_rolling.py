@@ -9,7 +9,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
+from sklearn.base import clone
+from sklearn.compose import ColumnTransformer, TransformedTargetRegressor
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -63,6 +64,19 @@ def candidates():
         ]
     )
     return models
+
+
+def huber_target_candidates():
+    huber = near.candidates()["huber_sgd"]
+    return {
+        "huber_sgd": huber,
+        # 큰 성장률을 압축하고, 평가 전에는 원래 성장률 단위로 되돌린다.
+        "huber_asinh": TransformedTargetRegressor(
+            regressor=clone(huber),
+            func=np.arcsinh,
+            inverse_func=np.sinh,
+        ),
+    }
 
 
 def split_fold(frame, origin, horizon, label_embargo_quarters=1):
@@ -231,6 +245,7 @@ def run(
     report_origins=2,
     label_embargo_quarters=1,
     training_scope="all",
+    compare_huber_targets=False,
 ):
     input_path, output = Path(input_path), Path(output)
     if output.exists():
@@ -266,6 +281,7 @@ def run(
         report_origins=report_origins,
         label_embargo_quarters=label_embargo_quarters,
         base_counts=base_counts,
+        candidate_factory=huber_target_candidates if compare_huber_targets else None,
     )
     if file_sha256(input_path) != input_hash:
         raise ValueError("Input changed during evaluation")
@@ -280,6 +296,7 @@ def run(
         "source_observation_periods": source_periods,
         "source_available_at_range": [availability[0], availability[-1]],
         "training_scope": training_scope,
+        "candidate_set": "huber_target_comparison" if compare_huber_targets else "default",
         "evaluation_industries": list(SERVICE_INDUSTRIES),
         "selection_origins": list(origins[:-report_origins]),
         "reporting_origins": list(origins[-report_origins:]),
@@ -325,6 +342,11 @@ def main():
     parser.add_argument("--report-origins", type=int, default=2)
     parser.add_argument("--label-embargo-quarters", type=int, default=1)
     parser.add_argument("--training-scope", choices=("all", "service3"), default="all")
+    parser.add_argument(
+        "--compare-huber-targets",
+        action="store_true",
+        help="Compare Huber training on raw growth and asinh-transformed growth",
+    )
     args = parser.parse_args()
     summary = run(
         args.input,
@@ -334,6 +356,7 @@ def main():
         report_origins=args.report_origins,
         label_embargo_quarters=args.label_embargo_quarters,
         training_scope=args.training_scope,
+        compare_huber_targets=args.compare_huber_targets,
     )
     print(
         json.dumps({"output": str(args.output), "selected": summary["selected_by_selection_mae"]})
