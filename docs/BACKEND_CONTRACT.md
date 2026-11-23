@@ -68,6 +68,17 @@ PICKPLACE_SEOUL_FALLBACK_SNAPSHOT=data/processed/seoul/seoul-2021-2026q2-2026110
 PYTHONPATH=src:. .venv/bin/uvicorn pickplace_ai.api:app --host 127.0.0.1 --port 18000
 ```
 
+#### 실제 HTTP 검증 (2026-11-23)
+
+`develop`의 병합 커밋 `987c974`에서 Uvicorn을 로컬로 띄우고 `/health`의 `seoul_growth_fallback_ready=true`를 확인했다. 두 `POST /predict` 요청 모두 `region_code_system=seoul-adstrd`, `source_kind=official`, `base_period=2026Q3`, `as_of=2026-11-23`, `history=[]`를 전달했다. FastAPI는 설정된 서울 스냅샷에서 각 조합의 Q2 이력을 조회했다.
+
+| 요청한 행정동·업종 | 필요한 5분기의 매출 이력 | HTTP | `growth.status` | `growth.base_period` → `growth.target_period` | `growth.estimated_yoy_growth` | `growth.fallback_reason` | `growth.reason` |
+|---|---|---:|---|---|---|---|---|
+| 청운효자동 커피·음료 (`11110515`, `CS100010`) | 2025Q2~2026Q2 연속 5분기 | 200 | `available` | `2026Q2` → `2026Q4` | `-0.09213583704690517` (전년 동기 대비 −9.21%) | `insufficient_history` | `null` |
+| 장위3동 제과점 (`11290780`, `CS100005`) | 2025Q2~2025Q4만 확보 | 200 | `unavailable` | `null` → `2026Q4` | `null` | `insufficient_history` | `fallback_insufficient_history` |
+
+청운효자동 응답은 비교 분기 `2025Q4`, 예측 거리 2분기, `release_status=experimental_research_only`를 반환했다. 두 응답의 최상위 기준 분기는 요청한 `2026Q3`이었다. 검증 후 임시 서버를 종료했다.
+
 ### 매출 변화와 폐업 부담
 
 기본 `POST /predict` v1.0은 기존 `risk` 객체 옆에 `risk_indicators`를 반환한다. 두 관측 지표는 종합지수나 성장 모델 준비 상태와 독립적으로 계산한다.
