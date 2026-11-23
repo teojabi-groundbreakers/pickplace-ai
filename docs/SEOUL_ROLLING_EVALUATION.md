@@ -162,6 +162,20 @@ PYTHONPATH=src:. .venv/bin/python scripts/evaluate_seoul_next_quarter_tail.py \
 
 `reports/`에 전체·업종·구·매출 구간별 지표와 행별 대조 결과를 저장한다. `private-paired-errors.csv`에는 실제 성장률과 비교 매출이 들어 있다. 새 출력 경로에 실행하며 생성 결과는 Git 제외 경로에 보관한다.
 
+## 2026Q3 비교용 모델 파일 만들기
+
+기존 Huber와 전년 동기 매출 1억 원 미만에만 변환을 적용하는 후보를 한 연구 번들에 저장한다. 두 후보는 2026Q1까지의 학습 라벨과 2026Q2 입력으로 2026Q3 성장률을 추정한다. 실행 시 입력·코드·라이브러리 지문을 확인한다. 생성한 모델을 다시 불러와 고정된 행정동·업종 1,206개에 대해 비교 매출, 변환 적용 여부, 두 예측값을 대조한다.
+
+```bash
+PYTHONPATH=src:. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  .venv/bin/python -m scripts.train_seoul_q3_huber_pair \
+  --input data/processed/seoul/seoul-2021-2026q2-20261104.csv \
+  --frozen-dir reports/seoul-q3-huber-frozen-20261121 \
+  --output artifacts/seoul-q3-huber-pair-20261123
+```
+
+이미 결과가 있는 경우 새 출력 경로를 사용한다. `model.joblib`은 두 예측기를 담고 `summary.json`은 재현 결과와 SHA-256을 담는다. 이는 3분기 실측과 대조할 연구 산출물이다. 실측이 확보되면 고정한 2025Q3 매출을 분모로 사용해 같은 지역·업종에서 MAE와 P90을 계산한다. 모델과 입력 자료는 로컬 Git 제외 경로에 보관한다.
+
 ## 다음 판단
 
 선택 후보가 여러 분기·업종에서 기준 모델보다 나은지 확인한 뒤 별도 재학습·결과 제공 기준 실험을 진행한다. 보고 구간의 결과를 보고 후보·임계값을 다시 조정하면 해당 구간도 선택에 사용한 것으로 기록해야 한다. 이 평가만으로 운영 승인, 예측구간 보정, 위험도·적합도 타당성 검증 또는 FE·BE 통합이 완료되지는 않는다.
