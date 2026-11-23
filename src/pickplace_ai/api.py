@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import Field
 
 from pickplace_ai import __version__
 from pickplace_ai.artifacts import ModelBundle, load_bundle
@@ -31,8 +32,13 @@ from pickplace_ai.fit_reference import (
 )
 from pickplace_ai.periods import quarter_end, shift_quarter
 from pickplace_ai.risk_indicators import observe_risk_indicators
-from pickplace_ai.schemas import PredictionRequest
+from pickplace_ai.schemas import Observation, PredictionRequest
 from pickplace_ai.scoring import diagnose
+from pickplace_ai.seoul_growth_fallback import (
+    MISSING_INPUT_REASONS,
+    SeoulGrowthFallback,
+    supports_request,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +61,15 @@ class Settings:
     allow_experimental: bool = False
     fit_reference_dir: Path | None = None
     gyeonggi_fit_reference_dir: Path | None = None
+    seoul_fallback_model_dir: Path | None = None
+    seoul_fallback_snapshot: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
         fit_reference_dir = os.environ.get("PICKPLACE_SEOUL_FIT_REFERENCE_DIR")
         gyeonggi_reference_dir = os.environ.get("PICKPLACE_GYEONGGI_FIT_REFERENCE_DIR")
+        fallback_model = os.environ.get("PICKPLACE_SEOUL_FALLBACK_MODEL_DIR")
+        fallback_snapshot = os.environ.get("PICKPLACE_SEOUL_FALLBACK_SNAPSHOT")
         return cls(
             model_dir=Path(os.environ.get("PICKPLACE_MODEL_DIR", "artifacts/current")),
             api_key=os.environ.get("PICKPLACE_API_KEY") or None,
@@ -70,7 +80,31 @@ class Settings:
             gyeonggi_fit_reference_dir=Path(gyeonggi_reference_dir)
             if gyeonggi_reference_dir
             else None,
+            seoul_fallback_model_dir=Path(fallback_model) if fallback_model else None,
+            seoul_fallback_snapshot=Path(fallback_snapshot) if fallback_snapshot else None,
         )
+
+
+class AnalysisRequest(PredictionRequest):
+    history: list[Observation] = Field(max_length=128)
+
+    def _allows_missing_base(self) -> bool:
+        return supports_request(self)
+
+
+def _load_seoul_fallback(config: Settings) -> tuple[SeoulGrowthFallback | None, str | None]:
+    model_dir, snapshot = config.seoul_fallback_model_dir, config.seoul_fallback_snapshot
+    if model_dir is None and snapshot is None:
+        return None, "fallback_not_configured"
+    if model_dir is None or snapshot is None:
+        return None, "fallback_configuration_incomplete"
+    if not config.allow_experimental:
+        return None, "fallback_experimental_model_disabled"
+    try:
+        return SeoulGrowthFallback(model_dir, snapshot), None
+    except Exception:
+        logger.exception("Configured Seoul fallback could not be loaded")
+        return None, "fallback_load_failed"
 
 
 @dataclass(frozen=True)
@@ -178,6 +212,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.bundle = None
         application.state.model_reason = "model_not_found"
+        application.state.seoul_fallback, application.state.seoul_fallback_reason = (
+            _load_seoul_fallback(config)
+        )
         application.state.fit_catalogs = {
             KIND: _FitCatalog.load(config.fit_reference_dir, KIND),
             GYEONGGI_KIND: _FitCatalog.load(config.gyeonggi_fit_reference_dir, GYEONGGI_KIND),
@@ -193,6 +230,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.model_reason = "model_load_failed"
         yield
         application.state.bundle = None
+        application.state.seoul_fallback = None
         application.state.fit_catalogs.clear()
 
     application = FastAPI(
@@ -238,6 +276,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "basic_diagnosis_ready": True,
             "growth_model_ready": reason is None,
             "growth_model_reason": reason,
+            "seoul_growth_fallback_ready": request.app.state.seoul_fallback is not None,
+            "seoul_growth_fallback_reason": request.app.state.seoul_fallback_reason,
             "fit_reference_ready": bool(seoul.references),
             "fit_reference_reason": seoul.reason,
             "fit_reference_periods": sorted(seoul.references),
@@ -274,7 +314,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }
 
     @application.post("/predict", dependencies=[Depends(authorize)])
-    def predict(payload: PredictionRequest, request: Request) -> dict[str, Any]:
+    def predict(payload: AnalysisRequest, request: Request) -> dict[str, Any]:
         if payload.source_kind == "synthetic" and not config.allow_synthetic:
             raise HTTPException(status_code=403, detail="Synthetic requests are disabled")
 
@@ -287,17 +327,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "unavailable",
             "reason": request.app.state.model_reason,
             "estimated_yoy_growth": None,
+            "base_period": None,
             "target_period": target_period,
             "comparison_period": comparison_period,
+            "horizon_quarters": None,
+            "fallback_reason": None,
             "model_version": model_version,
+            "release_status": None,
             "explanations": [],
         }
         warnings = list(diagnosis.get("warnings", []))
         if payload.source_kind == "synthetic":
             warnings.append("합성 예시 데이터의 결과이며 실제 지역 진단이나 성능이 아닙니다.")
 
-        if quarter_end(target_period) <= payload.as_of:
+        ongoing_target = quarter_end(target_period) > payload.as_of
+        primary_features = None
+        missing_input = None
+        fallback_reason = request.app.state.seoul_fallback_reason
+        if (
+            ongoing_target
+            and supports_request(payload)
+            and fallback_reason != "fallback_not_configured"
+        ):
+            try:
+                primary_features = feature_record(
+                    payload.history, payload.base_period, payload.as_of
+                )
+            except FeatureUnavailable as exc:
+                if exc.reason in MISSING_INPUT_REASONS:
+                    missing_input = exc.reason
+
+        if not ongoing_target:
             growth["reason"] = "target_not_future"
+        elif missing_input is not None:
+            growth.update(fallback_reason=missing_input, model_version=None)
+            fallback = request.app.state.seoul_fallback
+            if fallback is None:
+                growth["reason"] = fallback_reason
+            else:
+                try:
+                    growth.update(fallback.predict(payload))
+                except Exception:
+                    logger.exception("Seoul fallback inference failed")
+                    growth["reason"] = "fallback_inference_failed"
         elif request.app.state.model_reason is None and bundle is not None:
             scope = {
                 "region_code": payload.region_code,
@@ -312,13 +384,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 growth["reason"] = temporal_reason
             else:
                 try:
-                    features = feature_record(payload.history, payload.base_period, payload.as_of)
+                    features = primary_features or feature_record(
+                        payload.history, payload.base_period, payload.as_of
+                    )
                     estimate = float(bundle.predict(features))
                     if not math.isfinite(estimate) or estimate < -1:
                         growth["reason"] = "prediction_out_of_bounds"
                     else:
                         growth.update(
-                            status="available", reason=None, estimated_yoy_growth=estimate
+                            status="available",
+                            reason=None,
+                            estimated_yoy_growth=estimate,
+                            base_period=payload.base_period,
+                            horizon_quarters=1,
+                            release_status=bundle.metadata["release_status"],
                         )
                         explanations, explanation_warnings = _growth_explanations(bundle, features)
                         growth["explanations"] = explanations

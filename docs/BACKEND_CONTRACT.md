@@ -47,6 +47,27 @@ AI 서비스는 **내부 계산 API**다. FE가 요청하는 `/analyses`의 전�
 
 FE의 현재 계약 초안에는 일부 점수와 수치형 신뢰도를 필수로 기대하는 부분이 있다. AI의 부분 가용성·`null` 결과를 연동하려면 BE·FE 계약을 조정해야 한다. 검증하지 않은 신뢰도 숫자나 종합점수를 만들어 기존 타입을 채우지 않는다. 이번 AI 준비 작업은 기존 FE 소스·계약을 수정하지 않는다.
 
+### 서울 2026Q4 성장 예측의 이전 분기 전환
+
+연구 모드의 기본 `POST /predict`에서 `official` 서울 원본 코드와 `base_period=2026Q3`으로 요청하면 Q4를 대상으로 삼는다. Q3 기준 요청에 연속 매출 이력이 있으면 기본 1분기 모델의 판단을 따른다. Q3 매출이 없거나 이력이 부족하면 서버에 설정한 공식 서울 스냅샷에서 같은 행정동·업종의 Q2까지 연속 5분기를 확인하고, Q4용 2분기 앞 모델로 직접 계산한다. 이 요청에서는 Q3 관측 행이 빠지거나 `history`가 빈 배열이어도 정상 처리한다.
+
+| 성장 예측 결과 | 필드 |
+|---|---|
+| Q2 입력으로 Q4 추정 | `growth.base_period=2026Q2`, `growth.target_period=2026Q4`, `growth.horizon_quarters=2`, `growth.fallback_reason=missing_sales` 또는 `insufficient_history`, `growth.release_status=experimental_research_only` |
+| Q2 이력도 부족 | `growth.estimated_yoy_growth=null`, `growth.base_period=null`, `growth.target_period=2026Q4`, `growth.reason=fallback_insufficient_history` 또는 `fallback_missing_sales` |
+| Q4 종료 후 요청 | `growth.estimated_yoy_growth=null`, `growth.reason=target_not_future` |
+
+최상위 `base_period`는 요청 기준 Q3이며, 위험도·적합도는 계속 그 분기를 사용한다. `growth.fallback_reason`은 원래 요청의 부족 사유이며, `growth.reason`은 최종 결과를 제공할 수 없을 때의 사유다. 백엔드가 자료 부족으로 호출 자체를 `SKIPPED` 처리하면 이 전환은 실행되지 않는다.
+
+로컬에서 검증된 모델과 스냅샷을 지정해 시작한다. 스냅샷 CSV와 같은 위치에 `.manifest.json` 파일이 있어야 한다. `/health`의 `seoul_growth_fallback_ready`와 `seoul_growth_fallback_reason`으로 로드 상태를 확인한다.
+
+```bash
+PICKPLACE_ALLOW_EXPERIMENTAL=true \
+PICKPLACE_SEOUL_FALLBACK_MODEL_DIR=artifacts/seoul-near-term-2026q2-20261113 \
+PICKPLACE_SEOUL_FALLBACK_SNAPSHOT=data/processed/seoul/seoul-2021-2026q2-20261104.csv \
+PYTHONPATH=src:. .venv/bin/uvicorn pickplace_ai.api:app --host 127.0.0.1 --port 18000
+```
+
 ### 매출 변화와 폐업 부담
 
 기본 `POST /predict` v1.0은 기존 `risk` 객체 옆에 `risk_indicators`를 반환한다. 두 관측 지표는 종합지수나 성장 모델 준비 상태와 독립적으로 계산한다.
