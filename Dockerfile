@@ -10,6 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
+COPY scripts/near_term_forecast.py scripts/retrospective_all_industries.py scripts/retrospective_experiment.py ./scripts/
 RUN pip install --no-cache-dir -c requirements.lock . \
     && useradd --create-home --uid 10001 pickplace
 

@@ -57,6 +57,9 @@ class PredictionRequest(BaseModel):
     source_kind: SourceKind
     history: list[Observation] = Field(min_length=1, max_length=128)
 
+    def _allows_missing_base(self) -> bool:
+        return False
+
     @model_validator(mode="after")
     def validate_history(self) -> "PredictionRequest":
         from pickplace_ai.periods import quarter_end, quarter_index
@@ -81,6 +84,6 @@ class PredictionRequest(BaseModel):
                 raise ValueError("History cannot include periods after base_period")
             if row.available_at > self.as_of:
                 raise ValueError("History includes data not available at as_of")
-        if self.base_period not in periods:
+        if self.base_period not in periods and not self._allows_missing_base():
             raise ValueError("history must include base_period")
         return self
